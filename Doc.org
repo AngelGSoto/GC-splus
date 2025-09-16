@@ -27,7 +27,7 @@ Perform aperture photometry of globular clusters in NGC 5128 using data from the
 .
 ├── anac_data/                 # SPLUS data (by field)
 ├── Programs/             # Python scripts
-├── Catalogs/            # Input and output catalogs
+├── programss/            # Python scripts to do synthetic photometry
 ├── Results/             # Photometry results
 └── Documentation/       # Documentation (this file)
 
