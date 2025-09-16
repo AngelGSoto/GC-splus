@@ -40,7 +40,7 @@ Perform aperture photometry of globular clusters in NGC 5128 using data from the
 
 * Methodology
 ** Pipeline Summary
-1. Estimate instrumetal photometry for refereces stars
+1. Estimate instrumetal photometry for referece stars
 2. Extraction of Gaia XP spectra for reference stars
 3. Generation of synthetic photometry from XP spectra
 4. Zero-point calculation for each field
