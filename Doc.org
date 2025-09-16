@@ -250,6 +250,8 @@ python Splus_photometry_final.py
 - Complete run: 6-12 hours (hardware dependent)
 - Per field: 15-30 minutes
 
+* Science
+
 * Contact and References
 - Author: Luis A. Gutiérrez Soto
 - Email: gsoto.angel@gmail.com
