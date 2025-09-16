@@ -1,0 +1,42 @@
+# Ignorar archivos de datos y formatos científicos
+*.fz
+*.fits
+*.dat
+
+# Ignorar archivos de logs
+*.log
+
+# Ignorar archivos temporales y de respaldo de editores
+*~
+.#*
+#*
+*.bak
+*.tmp
+
+# Ignorar archivos de entorno y configuración
+.env
+*.cfg
+
+# Ignorar archivos de Python generados automáticamente
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignorar checkpoints de Jupyter
+*.ipynb_checkpoints
+
+# Ignorar carpetas de salida o resultados
+output/
+results/
+tmp/
+temp/
+
+# Ignorar archivos CSV y TSV si no deseas compartirlos
+*.csv
+*.tsv
+
+# Ignorar todo el contenido de la caché de pyraf
+programs/pyraf/clcache.v2/
+
+# Ignorar archivos temporales o de respaldo que empiezan con #
+programs/#*
