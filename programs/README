@@ -1,0 +1,389 @@
+About the progams that make the photometry for any phothometric system.
+
+1. fits_syntphot.py
+              Estimate the magnitudes from SDSS spectrum.fits. Just set the transmission curves for a particular photometryc system.
+              For rum with lines of comands:
+              
+              $ for f in *.fits; do python ../programs/fits_syntphot.py ${f%.fits} --filters JPAS15 --name QSOs-201 --savefig --debug; done
+
+ 2. symphotometry.py
+
+              -) To run of models:
+                 
+               $ for f in *.dat.tere_E0.1; do python ../programs/symphotometry.py ${f%.dat.tere_E0.1} --filters SPLUS --name tere_E01 --savefig --debug; done
+
+                
+                 There is a title be change in the program and this change is; ".dat" per ".dat.tere_E0.1"
+
+.dat.tere_E0 -> name tere_E00               # al final colocar _100 or _300 or _600
+.dat.tere_E0.1 -> name tere_E01               tere_E01_100
+.dat.tere_E0.2 -> name tere_E02               tere_E02_100
+
+------------------------------                  
+3. To run the different set of spectrum (--name):
+              
+              -) HPNe
+              -) DPNe
+              -) CV
+              -) SFGs
+              -) sys
+              -) QSOs-hz
+              -) QSOs-010
+              -) QSOs-101
+              -) QSOs-201
+              -) QSOs-301
+              -) QSOs-401
+	      -) sys-IPHAS
+	      -) ExtHII
+	      -) QSOs-13
+	      -) QSOs-24
+	      -) QSOs-30 # solo para JPAS es la linea de lyman alpha
+	      -) QSOs-30
+	      -) galaxy # HII galaxies
+
+
+A better way based ChtaGpt:
+
+find . -maxdepth 1 -type f -name '*.dat' -print0 | \
+    xargs -0 -I{} python ../programs/symphotometry.py {} --filters SPLUS21 --name CV_SPLUS --savefig --debug
+
+
+____________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________
+#############################
+CLASE De IGNASIO#############
+#############################
+#Como abrir Topcat
+
+$: java -jar topcat-full.jar
+
+http://skyserver.sdss.org/dr13/en/tools/search/form/searchform.aspx
+
+SQRl
+http://skyserver.sdss.org/dr13/en/tools/search/sql.aspx
+
+
+select top 1000 p.objid, p.ra, p.dec, p.u, p.g, p.r, p.i, p.z, p.psfMag_r, p.ModelMag_r, p.type
+from photoobj p, dbo.fgetNearByObjEq(180,30,60) n
+where p.objid=n.objid and (p.r BETWEEN 8 AND 18)
+
+=>Traer la imagen
+Activation action -> solo el primiero para traer las imagenes en la vantana que se abre.
+=>
+Submuestra=huevo fitro- se crea un nuevo. Luego ir 1:X_res-> subset
+
+Haciendo matching-->
+join ==> fosforito pair
+
+___________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________
+Matar solo una columna con emacs==>>
+
+If you were using Emacs 24.4, I might recommend doing this with rectangle-mark-mode (C-x SPC), kill-ring-save (M-w) and kill-region (C-w).
+
+With earlier versions, you could take largely the same approach by using CUA mode's rectangular selection and replacement tools. However, this is also pretty easy to do with a keyboard macro.
+
+You can also switch modes to org mode, and convert the region to a table, make your manipulations and export it back to CSV. Just select the whole table and execute org-table-convert-region. This should work no matter the alignment. You can use M-<arrow keys> to move columns around, and M-S-left to delete a column completely. See here for working with org tables.
+
+____________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________
+############################################################################################
+Otro nombre de PNe##########################################################################
+############################################################################################
+
+Halo Planetary nebulae with two names: MWC 574 or PN232.0+05.7 in the plots I put MWC 574.
+
+_____________________________________________________________________________________________________________________________________________
+_____________________________________________________________________________________________________________________________________________
+Minicurso alto desempeño
+
+vpnc /etc/vpnc/sdumont.conf
+
+ssh aluno1015@login.sdumont.lncc.br
+
+##############################################################################################################################################
+___________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________
+Email de Alessandro para descargar QSOs desde el SDSS page==>
+
+Hi Luis!
+
+When I downloaded the quasars, what I did was:
+-) I went to SDSS's query form: http://skyserver.sdss.org/dr12/en/tools/search/SQS.aspx
+-) I selected "no position constraint", "classification" -> "QSO", and I selected "Obj Type" -> "Point Sources" (I unmarked "Extended sources")
+-) this gives you a list of targets
+-) you can then download the data via wget as explained here http://www.sdss.org/dr12/data_access/bulk/
+-) mind you that the spectra are stored as fits-tables, with the wavelength in logarithm. It is not too difficult to transform this in a "human usable fits".
+
+A few doubts/questions:
+-) Are you expecting that all your objects will be unresolved? If so, the "Obj Type" is fine, otherwise, you may want to mark "Extended sources"
+-) lines of quasars are typically much broader than other AGNs. AGNs, though, may not be point sources though...
+
+Hope this helps.
+############################################################################################################################################
+
+I add new QSOs with different redshift range. No olvidar que tengo anotar eso aqui los nuevos rangos, porque estos tienen más sentido. Para el caso JPAS QSOS caen en los filtro de [O III] y Halpha. Para el caso de J-PLUS QSOs pueden caer en el filtro de Halpha. 
+____________________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________________
+Rutina en el shell para entrar y salir de carpetas y ejecutar comandos como al correr programs.
+
+for D in ./*; do
+    if [ -d "$D" ]; then
+        cd "$D"
+        run_something
+        cd ..
+    fi
+done
+
+de otra manera es también => 
+
+for D in ./BB*300-spectros; do if [ -d "$D" ]; then cd "$D"; run_something; cd ..; fi; done
+##############################################################################################################################################
+for D in ./BB*600-spectros; do if [ -d "$D" ]; then cd "$D"; for f in *-E0.dat; do python ../programs/symphotometry.py ${f%-E0.dat} --fitfile JPAS17 --name E00_600 --savefig --debug; done; cd ..; fi; done
+##############################################################################################################################################
+
+_____________________________________________________________________________________________________________________________________________
+---------------------------------------------------------------------------------------------------------------------------------------------
+
+Ya estan corridos los nuevos modelos (diferentes distancias 5kpc, 15kpc y 20 kpc) para SPLUS y JPAS2017 =
+__________________________________________________________________________________________________________________________________________
+___________________________________________________________________________________________________________________________________________
+##############################################################################
+Ecuaciones para hacer la fotometría sintectica.##############################
+##############################################################################
+
+Um poco sobre photometry sintectica => (http://mfouesneau.github.io/docs/pyphot/)
+
+AB magnitude system
+
+This system is defined such that, when monochromatic flux fν
+is measured in ergs−1cm−2Hz−1
+
+,
+magAB(T)=−2.5log10(fν¯¯¯¯¯)−48.60
+
+where the value of the constant is selected to define mAB=V
+
+for a flat-spectrum source. In this system, an object with constant flux per unit frequency interval has zero color.
+
+Koornneef et al. gives the respective definition of fν¯¯¯¯¯(T)
+
+:
+fν¯¯¯¯¯(T)=∫νfνT(ν)dν/ν∫νT(ν)dν/ν=∫λfνT(λ)dλ/λ∫λT(λ)dλ/λ
+
+To go back to wavelength units, we have dν=(c/λ2)dλ
+
+.
+
+If one defines the pivot wavelength λp
+to convert between fν¯¯¯¯¯ and fλ¯¯¯¯¯
+
+as
+fν¯¯¯¯¯=λ2pcfλ¯¯¯¯¯,
+
+one can easily show that
+λ2p=∫λT(λ)λdλ∫λT(λ)dλ/λ.
+
+Therefore for filters with AB magnitudes, one can compute
+magAB(T)=−2.5log10(fλ¯¯¯¯¯)−2.5log10(λ2p/c)−48.6,
+
+where care must be taken to use the speed of light c
+and λp in matching units.
+
+###################################################################################################################################
+____________________________________________________________________________________________________________________________________
+____________________________________________________________________________________________________________________________________
+Scrit para dercargar los datos del catálogo J-PLUs en lenguaje ADQL
+
+For PNe =>
+
+SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 1 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] < 0 AND CLASS_STAR > 0.5
+
+SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 1 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] < 0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] < 0 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= 1.4 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] >= -1.1 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] <= -0.6 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 0.7 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] <= 0.1 AND CLASS_STAR > 0.5
+
+For symbiotic stras=>
+
+SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 0.6 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] > 0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] <= 0.5 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] <= 1.0 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] <= -1.0 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] <= -1.4 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 1.1 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] >= 1.4 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] <= 1.5 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] <= 2.0 AND  MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] >= -0.3 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= -1.5 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] >= -4.0  AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] <= 4.0 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] <= 5.0 AND CLASS_STAR > 0.5
+
+# Nuevo criterio para descargar candidatas a estrellas simbióticas usando un nuevo diagrama color ==>>
+
+#SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 0.59 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] >= 0.02 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] >= -0.18 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= -1.0 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] >= -5.23 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] >= -3.78 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 1.42 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] >= 1.33 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] <= 1.74 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] <= 2.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] <= 0.5 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] <= 1.2 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] <= -1.8 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] <= -1.8 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] <= 4.0 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] <= 4.78 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] >= 2.6 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] >= 1.5 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] <= 5.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] <= 4.3 AND CLASS_STAR > 0.5
+
+# NUEVO criterio
+SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 0.59 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] >= 0.02 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] >= -0.18 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= 0.0 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] >= -3.5 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] >= -3.78 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 2.8 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] >= 2.8 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] <= 1.74 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] <= 2.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] <= 0.5 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] <= 1.2 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] <= -1.9 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] <= -1.8 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] <= 4.0 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] <= 4.78 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] >= 3.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] >= 1.6 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] <= 6.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] <= 4.4 AND CLASS_STAR > 0.5
+_____________________________________________________________________________________________
+SELECT * FROM jplus.MagABDualObj WHERE MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 0.59 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] >= 0.02 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] >= -0.18 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= -0.4 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] >= -3.5 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] >= -3.78 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 2.0 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] >= 1.70 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] <= 1.74 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS] <= 2.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] <= 0.5 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] <= 1.2 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS] <= -1.8 AND MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::gSDSS] <= -1.8 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] <= 5.2 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861] <= 5.6 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] >= 2.6 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] >= 1.6 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] <= 6.0 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS] <= 4.4 AND CLASS_STAR > 0.0
+
+
+===================================================
+SELECT * FROM jplus.MagABDualObj WHERE  MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] <= 5.5*(MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861]) - 6.45 AND MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0660] >= 0.98*(MAG_AUTO[jplus::J0515] - MAG_AUTO[jplus::J0861]) - 0.16 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] <= -1.96*(MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS]) - 3.15 AND MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::J0660] >= 0.2*(MAG_AUTO[jplus::zSDSS] - MAG_AUTO[jplus::gSDSS]) + 0.44 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660]  >= -240*(MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS]) + 40.4 AND MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::J0660] >= 0.39*(MAG_AUTO[jplus::rSDSS] - MAG_AUTO[jplus::iSDSS]) + 0.73 AND (MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660]) >= -5.2*(MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS]) + 10.60 AND MAG_AUTO[jplus::J0410] - MAG_AUTO[jplus::J0660] >= 2.13*(MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::iSDSS]) - 1.43 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] >= -0.19*(MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::rSDSS]) - 0.09 AND MAG_AUTO[jplus::gSDSS] - MAG_AUTO[jplus::J0515] <= -2.66*(MAG_AUTO[jplus::J0660] - MAG_AUTO[jplus::rSDSS]) - 2.2 
+
+
+
+
+
+Nota: Encontre 122 candidatas usando este nuevo criterio.
+
+_________________________________________________
+The distinction is made based on SExtractor CLASS_STAR, with "star" having CLASS_STAR>0.5 and the rest considered "galaxies"
+
+##############################################################################################################################################
+__________________________________________________________________________________________________________________________________________________________________________________________
+
+Para correr varios acrchivos .in con cloudy==>>
+for f in *.in; do cloudy ${f%.in}; done
+
+______________________________________________________________________________________________________________---
+################################################
+###############################################
+COLOUR-CLOUR DIAGRAMS
+###############################################
+###############################################
+Construi un nuevo diagrama que funciona muy bien... para ello use PCA para elegir los filtros que son:
+
+(J0410 - J0660) vs (g - J0861)
+
+mejor usar este (pero no sé)
+
+(J0410 - J0660) vs (g - i)
+
+pero estoy pensando cambiar J0861 por el filtro i Quiero usar la mayor cantidad de filtros posibles para clasificar los objetos.
+
+Candidtads a estrellas symbióticas que no aparecen en el SDSS
+-) 19341.0	108.931331502	41.7851730437
+-) 25009.0	109.227662595	42.0396844319
+
+PARA NO OLVIDAR=>
+Colocar los errores a los objetos (candidatos encontrados en JPLUS)
+
+############################################
+#_________________________________________##
+############################################
+Las luminosidades usadas en los modelos==>>
+
+L2 #log L = 500 x 3.839×1033 erg/s (in solar units)
+L3 #log L = 1 000 x 3.839×1033 erg/s (in solar units)
+L5 #log L = 5 000 x 3.839×1033 erg/s (in solar units)
+L4 #log L = 10 000 x 3.839×1033 erg/s (in solar units)
+
+#################################################
+Los primeros modelos con 1000 CM^-3, L4 and T form 50 to 250K
+
+T50: r-Ha = 0.68
+T250: r-Ha = 2.25
+
+##############################################################
+#Cambiando nombre de archivos con loop                       #
+##############################################################
+The internet: https://unix.stackexchange.com/questions/102647/how-to-rename-multiple-files-in-single-command-or-script-in-unix
+
+for file in aro_tty-mIF-*_opt
+do
+    mv -i "${file}" "${file/-mIF-/-mImpFRA-}"
+done
+
+Aplicación:
+
+for f in BB1_L3_T*.in; do mv -i "$f" "${f/3/5}"; done
+_______________________________________________________________________
+Editando contenido de archivos=>
+
+sed -i -- 's/36.5842/36.283188/g' *
+sed -i -- 's/1000/500/g' *
+sed -i -- 's/3.477/3.0/g' *
+sed -i -- 's/3000cm^/1000cm^/g' *
+sed -i -- 's/DdDm1_L3_T.*_LineSpec.dat/_LineSpec.dat/g' *
+sed -i -- 's/DdDm1_L3_T.*_ionizing_SED.dat/_ionizing_SED.dat/g' *
+sed -i -- 's/DdDm1_L3_T.*_output_SED.dat/_output_SED.dat/g' *
+
+########################################################
+########################################################
+Para convertir el flujo saliente de CLOUDY==>
+
+for f in *output_SED.dat; do python ../new-programs/convertion-flux-cloudy.py ${f%output_SED.dat} --debug; done
+
+Problematicos para cortar el espetro y hacer la conversion estan en la carpeta: BB_DdDm1_l4-100-spectros
+
+###########################################################################
+
+###########################################################################
+Primeros YSOs=>
+Carpeta: YSOs-spectros. Ref: X-shooter spectroscopy of young stellar objects Rigliaco et al. 2012
+
+Segunda descarga YSOs =>
+Carpeta YSOs2-spectros. Ref: VizieR Online Data Catalog: 36 accreting YSOs emission lines (Alcala+, 2014)
+
+
+########################################################################
+Carpeta con algunos modelos raros
+BB_K648_L3-600-spectros
+###################################################################
+
+
+####################################################################
+Haciendo Crosmatching con TopCat==>
+Two tables=>
+http://www.star.bris.ac.uk/~mbt/topcat/sun253/pairMatch.html
+http://www.star.bris.ac.uk/~mbt/topcat/sun253/MatchWindow.html
+####################################################################
+
+Nebulosa confirmada encontrada con mis criterios=>
+
+17643.0	285.110597952	38.3520080884	14.6058369	14.5288668	14.6673603	15.0193253	14.7185335	13.8502798	15.42239	14.1130219	12.0540113	14.9632168	15.2237234	15.0010681	0.974609
+
+##################################################################################################################
+MI cuenta en SPLUS=====>>>>>>
+
+wiki: http://extranet.on.br:8000/splus/wiki
+username: gutierrez
+senha: splu$wik!
+
+====================================================================================================================
+====================================================================================================================
+for f in *_swp; do python ../cut-images-fits.py ${f%_swp} --debug; done
+
+#######################################
+Nebulosa conocida del halo para observar con el SOAR
+############################################
+
+PN G006.0-41.9 -- Planetary Nebula
+Distance to the center arcsec: 	0.00
+Other object types: 	PN (PN,PK), * (GSC2,USNO), CV? (Ref)
+ICRS coord. (ep=J2000) : 	21 05 53.557 -37 08 40.26 [ ] D 2003A&A...408.1029K
+FK4 coord. (ep=B1950 eq=1950) : 	21 02 44.535 -37 20 42.33 [ ]
+Gal coord. (ep=J2000) : 	006.072748 -41.917909 [ ]
+Fluxes (2) : 	
+B 16.52 [~] D 2015MNRAS.453.1879K
+V 16.32 [~] D 2015MNRAS.453.1879K
+
+
+
+BRASBRRJRJ1
+
+#########################################################################################################################################
+-----------------------------------------------------------------------------------------------------------------------------------------
+#########################################################################################################################################
+I suppose most of you may be familiar with Topcat and you probably have done more than a multi-cone search.
+If you do not know what I am talking about:
+-) topcat is a tool developed in the framework of the virtual observatory (VO)
+-) a multi-cone search is one of the many ways to search objects in the VO; in this case, topcat searches for all objects (in a given catalogue) that fall within a radius of a list of coordinates (right ascension and declination). The catch is: if one of the two catalogues is big (e.g. the J-PLUS catalogue), you do not need to download it!
+
+Let's make an example to make it clear.
+
+I already know which Cataclysmic Variables (CVs) are in the observed footprint of J-PLUS (if you want to know how I know it, this is another tutorial). Let's check what their magnitudes are.
+
+So let's load in Topcat the catalogue that I am sending attachment  ("Open"->"Filestore Browser" and browse until you find it; do not forget to tell Topcat that it is a fits file) and that I prepared beforehand. You will see that it has 17 rows. In other words, in the area of J-PLUS, there are 17 known CVs.
+
+Then go to "VO" -> "Multicone". In "Multiple Cone Search Parameters", in "Cone Search URL", you can select your favourite "Cone Search URL" of J-PLUS. In my case, I have big sympathy for the one in double mode with calibrated AB magnitudes. Hence I copy and paste this: https://archive.cefca.es/catalogues/vo/cone/jplus-sv02/JPLUS.CALIBRATEDMAGABDUALOBJ
+Then select as input table RitterAndKolb_CVsInObservedJPLUS.fits . Topcat should be smart enough to detect the columns with Right Ascension and Declination. Just in case, they are RAJ2000 and DEJ2000 (in both cases, they are in degrees). Then you can select a search radius. In my case, I tend to use 5arcsec.
+
+You will be asked for your credentials. Just put in the username (or email address) and password that you use to access the J-PLUS archive https://archive.cefca.es/catalogues
+and Topcat will do the rest. It should return a new table with 6 objects.
+Mind you that the table that you get has magnitudes as arrays with 12 elements. This is because you are getting magnitudes in all the filters. You will have to save this table to a file and then read it with you favourite language (Topcat does many things but not magic…yet).
+
+
+##############################################################
+##Cut images with 2D Cutout images ###########################
+##############################################################
+
+https://docs.astropy.org/en/stable/nddata/utils.html
