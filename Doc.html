@@ -1,0 +1,945 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+<!-- 2025-09-15 Mon 21:31 -->
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Photometric Analysis of Globular Clusters in NGC 5128 (Centaurus A)</title>
+<meta name="author" content="Luis A. Gutiérrez Soto" />
+<meta name="description" content="Complete pipeline for photometric analysis of globular clusters in Centaurus A using SPLUS data" />
+<meta name="generator" content="Org Mode" />
+<style>
+  #content { max-width: 60em; margin: auto; }
+  .title  { text-align: center;
+             margin-bottom: .2em; }
+  .subtitle { text-align: center;
+              font-size: medium;
+              font-weight: bold;
+              margin-top:0; }
+  .todo   { font-family: monospace; color: red; }
+  .done   { font-family: monospace; color: green; }
+  .priority { font-family: monospace; color: orange; }
+  .tag    { background-color: #eee; font-family: monospace;
+            padding: 2px; font-size: 80%; font-weight: normal; }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .org-right  { margin-left: auto; margin-right: 0px;  text-align: right; }
+  .org-left   { margin-left: 0px;  margin-right: auto; text-align: left; }
+  .org-center { margin-left: auto; margin-right: auto; text-align: center; }
+  .underline { text-decoration: underline; }
+  #postamble p, #preamble p { font-size: 90%; margin: .2em; }
+  p.verse { margin-left: 3%; }
+  pre {
+    border: 1px solid #e6e6e6;
+    border-radius: 3px;
+    background-color: #f2f2f2;
+    padding: 8pt;
+    font-family: monospace;
+    overflow: auto;
+    margin: 1.2em;
+  }
+  pre.src {
+    position: relative;
+    overflow: auto;
+  }
+  pre.src:before {
+    display: none;
+    position: absolute;
+    top: -8px;
+    right: 12px;
+    padding: 3px;
+    color: #555;
+    background-color: #f2f2f299;
+  }
+  pre.src:hover:before { display: inline; margin-top: 14px;}
+  /* Languages per Org manual */
+  pre.src-asymptote:before { content: 'Asymptote'; }
+  pre.src-awk:before { content: 'Awk'; }
+  pre.src-authinfo::before { content: 'Authinfo'; }
+  pre.src-C:before { content: 'C'; }
+  /* pre.src-C++ doesn't work in CSS */
+  pre.src-clojure:before { content: 'Clojure'; }
+  pre.src-css:before { content: 'CSS'; }
+  pre.src-D:before { content: 'D'; }
+  pre.src-ditaa:before { content: 'ditaa'; }
+  pre.src-dot:before { content: 'Graphviz'; }
+  pre.src-calc:before { content: 'Emacs Calc'; }
+  pre.src-emacs-lisp:before { content: 'Emacs Lisp'; }
+  pre.src-fortran:before { content: 'Fortran'; }
+  pre.src-gnuplot:before { content: 'gnuplot'; }
+  pre.src-haskell:before { content: 'Haskell'; }
+  pre.src-hledger:before { content: 'hledger'; }
+  pre.src-java:before { content: 'Java'; }
+  pre.src-js:before { content: 'Javascript'; }
+  pre.src-latex:before { content: 'LaTeX'; }
+  pre.src-ledger:before { content: 'Ledger'; }
+  pre.src-lisp:before { content: 'Lisp'; }
+  pre.src-lilypond:before { content: 'Lilypond'; }
+  pre.src-lua:before { content: 'Lua'; }
+  pre.src-matlab:before { content: 'MATLAB'; }
+  pre.src-mscgen:before { content: 'Mscgen'; }
+  pre.src-ocaml:before { content: 'Objective Caml'; }
+  pre.src-octave:before { content: 'Octave'; }
+  pre.src-org:before { content: 'Org mode'; }
+  pre.src-oz:before { content: 'OZ'; }
+  pre.src-plantuml:before { content: 'Plantuml'; }
+  pre.src-processing:before { content: 'Processing.js'; }
+  pre.src-python:before { content: 'Python'; }
+  pre.src-R:before { content: 'R'; }
+  pre.src-ruby:before { content: 'Ruby'; }
+  pre.src-sass:before { content: 'Sass'; }
+  pre.src-scheme:before { content: 'Scheme'; }
+  pre.src-screen:before { content: 'Gnu Screen'; }
+  pre.src-sed:before { content: 'Sed'; }
+  pre.src-sh:before { content: 'shell'; }
+  pre.src-sql:before { content: 'SQL'; }
+  pre.src-sqlite:before { content: 'SQLite'; }
+  /* additional languages in org.el's org-babel-load-languages alist */
+  pre.src-forth:before { content: 'Forth'; }
+  pre.src-io:before { content: 'IO'; }
+  pre.src-J:before { content: 'J'; }
+  pre.src-makefile:before { content: 'Makefile'; }
+  pre.src-maxima:before { content: 'Maxima'; }
+  pre.src-perl:before { content: 'Perl'; }
+  pre.src-picolisp:before { content: 'Pico Lisp'; }
+  pre.src-scala:before { content: 'Scala'; }
+  pre.src-shell:before { content: 'Shell Script'; }
+  pre.src-ebnf2ps:before { content: 'ebfn2ps'; }
+  /* additional language identifiers per "defun org-babel-execute"
+       in ob-*.el */
+  pre.src-cpp:before  { content: 'C++'; }
+  pre.src-abc:before  { content: 'ABC'; }
+  pre.src-coq:before  { content: 'Coq'; }
+  pre.src-groovy:before  { content: 'Groovy'; }
+  /* additional language identifiers from org-babel-shell-names in
+     ob-shell.el: ob-shell is the only babel language using a lambda to put
+     the execution function name together. */
+  pre.src-bash:before  { content: 'bash'; }
+  pre.src-csh:before  { content: 'csh'; }
+  pre.src-ash:before  { content: 'ash'; }
+  pre.src-dash:before  { content: 'dash'; }
+  pre.src-ksh:before  { content: 'ksh'; }
+  pre.src-mksh:before  { content: 'mksh'; }
+  pre.src-posh:before  { content: 'posh'; }
+  /* Additional Emacs modes also supported by the LaTeX listings package */
+  pre.src-ada:before { content: 'Ada'; }
+  pre.src-asm:before { content: 'Assembler'; }
+  pre.src-caml:before { content: 'Caml'; }
+  pre.src-delphi:before { content: 'Delphi'; }
+  pre.src-html:before { content: 'HTML'; }
+  pre.src-idl:before { content: 'IDL'; }
+  pre.src-mercury:before { content: 'Mercury'; }
+  pre.src-metapost:before { content: 'MetaPost'; }
+  pre.src-modula-2:before { content: 'Modula-2'; }
+  pre.src-pascal:before { content: 'Pascal'; }
+  pre.src-ps:before { content: 'PostScript'; }
+  pre.src-prolog:before { content: 'Prolog'; }
+  pre.src-simula:before { content: 'Simula'; }
+  pre.src-tcl:before { content: 'tcl'; }
+  pre.src-tex:before { content: 'TeX'; }
+  pre.src-plain-tex:before { content: 'Plain TeX'; }
+  pre.src-verilog:before { content: 'Verilog'; }
+  pre.src-vhdl:before { content: 'VHDL'; }
+  pre.src-xml:before { content: 'XML'; }
+  pre.src-nxml:before { content: 'XML'; }
+  /* add a generic configuration mode; LaTeX export needs an additional
+     (add-to-list 'org-latex-listings-langs '(conf " ")) in .emacs */
+  pre.src-conf:before { content: 'Configuration File'; }
+
+  table { border-collapse:collapse; }
+  caption.t-above { caption-side: top; }
+  caption.t-bottom { caption-side: bottom; }
+  td, th { vertical-align:top;  }
+  th.org-right  { text-align: center;  }
+  th.org-left   { text-align: center;   }
+  th.org-center { text-align: center; }
+  td.org-right  { text-align: right;  }
+  td.org-left   { text-align: left;   }
+  td.org-center { text-align: center; }
+  dt { font-weight: bold; }
+  .footpara { display: inline; }
+  .footdef  { margin-bottom: 1em; }
+  .figure { padding: 1em; }
+  .figure p { text-align: center; }
+  .equation-container {
+    display: table;
+    text-align: center;
+    width: 100%;
+  }
+  .equation {
+    vertical-align: middle;
+  }
+  .equation-label {
+    display: table-cell;
+    text-align: right;
+    vertical-align: middle;
+  }
+  .inlinetask {
+    padding: 10px;
+    border: 2px solid gray;
+    margin: 10px;
+    background: #ffffcc;
+  }
+  #org-div-home-and-up
+   { text-align: right; font-size: 70%; white-space: nowrap; }
+  textarea { overflow-x: auto; }
+  .linenr { font-size: smaller }
+  .code-highlighted { background-color: #ffff00; }
+  .org-info-js_info-navigation { border-style: none; }
+  #org-info-js_console-label
+    { font-size: 10px; font-weight: bold; white-space: nowrap; }
+  .org-info-js_search-highlight
+    { background-color: #ffff00; color: #000000; font-weight: bold; }
+  .org-svg { width: 90%; }
+</style>
+</head>
+<body>
+<div id="content" class="content">
+<h1 class="title">Photometric Analysis of Globular Clusters in NGC 5128 (Centaurus A)</h1>
+<div id="table-of-contents" role="doc-toc">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents" role="doc-toc">
+<ul>
+<li><a href="#org2c35de8">1. Introduction</a>
+<ul>
+<li><a href="#org2383a4a">1.1. NGC 5128 (Centaurus A)</a>
+<ul>
+<li><a href="#orgd1629ca">1.1.1. Key Properties</a></li>
+</ul>
+</li>
+<li><a href="#org4c2fefd">1.2. Project Objective</a></li>
+</ul>
+</li>
+<li><a href="#org3243145">2. Project Structure</a>
+<ul>
+<li><a href="#orgefe89e3">2.1. Main Directories</a></li>
+<li><a href="#org52a9204">2.2. Processed SPLUS Fields</a></li>
+</ul>
+</li>
+<li><a href="#org99f39fd">3. Methodology</a>
+<ul>
+<li><a href="#orgf4f5d3e">3.1. Pipeline Summary</a></li>
+<li><a href="#org069c905">3.2. Step 1: Extraction of Gaia XP Spectra</a>
+<ul>
+<li><a href="#org12a53a3">3.2.1. Objective</a></li>
+<li><a href="#org2f4b862">3.2.2. Script Used</a></li>
+<li><a href="#org2f8f527">3.2.3. Inputs</a></li>
+<li><a href="#org4e439f8">3.2.4. Outputs</a></li>
+<li><a href="#org4534fe4">3.2.5. Notes</a></li>
+</ul>
+</li>
+<li><a href="#orgee79c52">3.3. Step 2: Synthetic Photometry</a>
+<ul>
+<li><a href="#org1d95522">3.3.1. Objective</a></li>
+<li><a href="#org98e398a">3.3.2. Execution Command</a></li>
+<li><a href="#org2b2e375">3.3.3. Parameters</a></li>
+<li><a href="#orgdedf98c">3.3.4. Outputs</a></li>
+</ul>
+</li>
+<li><a href="#orgf660c43">3.4. Step 3: Zero-point Calculation</a>
+<ul>
+<li><a href="#org05c8e11">3.4.1. Objective</a></li>
+<li><a href="#org52352b2">3.4.2. Individual Processing</a></li>
+<li><a href="#org75210dc">3.4.3. Expected Output</a></li>
+<li><a href="#org2ddb2d9">3.4.4. Batch Processing (All Fields)</a></li>
+<li><a href="#org883ddbd">3.4.5. Output Files</a></li>
+<li><a href="#org621674f">3.4.6. Statistical Summary</a></li>
+</ul>
+</li>
+<li><a href="#org186a1e2">3.5. Step 4: Globular Cluster Photometry</a>
+<ul>
+<li><a href="#orgb733fa3">3.5.1. Objective</a></li>
+<li><a href="#org7965162">3.5.2. Main Script</a></li>
+<li><a href="#orga9ca3f5">3.5.3. Main Inputs</a></li>
+<li><a href="#org7617518">3.5.4. Photometry Parameters</a></li>
+<li><a href="#org8afeb9f">3.5.5. Outputs</a></li>
+<li><a href="#org1c993ab">3.5.6. Final Catalog Structure</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org9888558">4. Execution Instructions</a>
+<ul>
+<li><a href="#org54095ed">4.1. Initial Setup</a></li>
+<li><a href="#org237ce04">4.2. Execution Order</a></li>
+<li><a href="#org1813b58">4.3. Complete Reprocessing Command</a></li>
+</ul>
+</li>
+<li><a href="#org15d2d37">5. Troubleshooting</a>
+<ul>
+<li><a href="#orgc7b8bde">5.1. Common Issues</a>
+<ul>
+<li><a href="#org6e88380">5.1.1. SPLUS Images Not Found</a></li>
+<li><a href="#org24f4434">5.1.2. No Zero-points for a Field</a></li>
+<li><a href="#orgb2717c5">5.1.3. Sources Near Edge</a></li>
+</ul>
+</li>
+<li><a href="#orga67bc1d">5.2. Result Interpretation</a></li>
+</ul>
+</li>
+<li><a href="#org266151e">6. Results and Products</a>
+<ul>
+<li><a href="#orge11ef5f">6.1. Generated Catalogs</a></li>
+<li><a href="#org06600f9">6.2. Output Formats</a></li>
+<li><a href="#org9bdf5eb">6.3. Quality Analysis</a></li>
+</ul>
+</li>
+<li><a href="#orgde6abdd">7. Technical Notes</a>
+<ul>
+<li><a href="#org18b4029">7.1. System Requirements</a></li>
+<li><a href="#org994c76e">7.2. Python Dependencies</a></li>
+<li><a href="#orgd4c22fe">7.3. Estimated Execution Time</a></li>
+</ul>
+</li>
+<li><a href="#org5690c85">8. Contact and References</a></li>
+<li><a href="#org124eb59">9. Documentation last updated: 15/09/2025 *</a></li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org2c35de8" class="outline-2">
+<h2 id="org2c35de8"><span class="section-number-2">1.</span> Introduction</h2>
+<div class="outline-text-2" id="text-1">
+</div>
+<div id="outline-container-org2383a4a" class="outline-3">
+<h3 id="org2383a4a"><span class="section-number-3">1.1.</span> NGC 5128 (Centaurus A)</h3>
+<div class="outline-text-3" id="text-1-1">
+<p>
+Centaurus A (also known as NGC 5128 or Caldwell 77) is a galaxy in the constellation of Centaurus.
+It was discovered in 1826 by Scottish astronomer James Dunlop from his home in Parramatta,
+in New South Wales, Australia. 
+</p>
+</div>
+
+<div id="outline-container-orgd1629ca" class="outline-4">
+<h4 id="orgd1629ca"><span class="section-number-4">1.1.1.</span> Key Properties</h4>
+<div class="outline-text-4" id="text-1-1-1">
+<ul class="org-ul">
+<li>Hubble type: Lenticular galaxy or giant elliptical galaxy (debated in literature)</li>
+<li>Distance: 11-13 million light-years (uncertain)</li>
+<li>Significance:
+<ul class="org-ul">
+<li>Closest radio galaxy to Earth</li>
+<li>Closest BL Lac object</li>
+<li>Fifth-brightest galaxy in the sky</li>
+</ul></li>
+<li>Visibility: Only visible from the southern hemisphere and low northern latitudes</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org4c2fefd" class="outline-3">
+<h3 id="org4c2fefd"><span class="section-number-3">1.2.</span> Project Objective</h3>
+<div class="outline-text-3" id="text-1-2">
+<p>
+Perform aperture photometry of globular clusters in NGC 5128 using data from the SPLUS (Southern Photometric Local Universe Survey).
+</p>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org3243145" class="outline-2">
+<h2 id="org3243145"><span class="section-number-2">2.</span> Project Structure</h2>
+<div class="outline-text-2" id="text-2">
+</div>
+<div id="outline-container-orgefe89e3" class="outline-3">
+<h3 id="orgefe89e3"><span class="section-number-3">2.1.</span> Main Directories</h3>
+<div class="outline-text-3" id="text-2-1">
+<p>
+.
+├── anac<sub>data</sub>/                 # SPLUS data (by field)
+├── Programs/             # Python scripts
+├── Catalogs/            # Input and output catalogs
+├── Results/             # Photometry results
+└── Documentation/       # Documentation (this file)
+</p>
+</div>
+</div>
+
+<div id="outline-container-org52a9204" class="outline-3">
+<h3 id="org52a9204"><span class="section-number-3">2.2.</span> Processed SPLUS Fields</h3>
+<div class="outline-text-3" id="text-2-2">
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-right" />
+
+<col  class="org-right" />
+
+<col  class="org-left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">Field</th>
+<th scope="col" class="org-right">RA</th>
+<th scope="col" class="org-right">DEC</th>
+<th scope="col" class="org-left">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">CenA01</td>
+<td class="org-right">200.1234</td>
+<td class="org-right">-47.2345</td>
+<td class="org-left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="org-left">&#x2026;</td>
+<td class="org-right">&#x2026;</td>
+<td class="org-right">&#x2026;</td>
+<td class="org-left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="org-left">CenA24</td>
+<td class="org-right">200.5678</td>
+<td class="org-right">-46.7890</td>
+<td class="org-left">&#xa0;</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org99f39fd" class="outline-2">
+<h2 id="org99f39fd"><span class="section-number-2">3.</span> Methodology</h2>
+<div class="outline-text-2" id="text-3">
+</div>
+<div id="outline-container-orgf4f5d3e" class="outline-3">
+<h3 id="orgf4f5d3e"><span class="section-number-3">3.1.</span> Pipeline Summary</h3>
+<div class="outline-text-3" id="text-3-1">
+<ol class="org-ol">
+<li>Estimate instrumetal photometry for refereces stars</li>
+<li>Extraction of Gaia XP spectra for reference stars</li>
+<li>Generation of synthetic photometry from XP spectra</li>
+<li>Zero-point calculation for each field</li>
+<li>Aperture photometry of globular clusters</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org069c905" class="outline-3">
+<h3 id="org069c905"><span class="section-number-3">3.2.</span> Step 1: Extraction of Gaia XP Spectra</h3>
+<div class="outline-text-3" id="text-3-2">
+</div>
+<div id="outline-container-org12a53a3" class="outline-4">
+<h4 id="org12a53a3"><span class="section-number-4">3.2.1.</span> Objective</h4>
+<div class="outline-text-4" id="text-3-2-1">
+<p>
+Identify stars in each SPLUS field and estimate the intrumentl
+magnitude using the python pagcage photutils obtain their
+Gaia DR3 XP spectra for calibration.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org2f4b862" class="outline-4">
+<h4 id="org2f4b862"><span class="section-number-4">3.2.2.</span> Script Used</h4>
+<div class="outline-text-4" id="text-3-2-2">
+<div class="org-src-container">
+<pre class="src src-sh">python ../Programs/extract_splus_gaia_xp_final.py
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2f8f527" class="outline-4">
+<h4 id="org2f8f527"><span class="section-number-4">3.2.3.</span> Inputs</h4>
+<div class="outline-text-4" id="text-3-2-3">
+<ul class="org-ul">
+<li>SPLUS images for each field</li>
+<li>Gaia DR3 catalog (automatically queried)</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org4e439f8" class="outline-4">
+<h4 id="org4e439f8"><span class="section-number-4">3.2.4.</span> Outputs</h4>
+<div class="outline-text-4" id="text-3-2-4">
+<ul class="org-ul">
+<li>CenAXX<sub>gaia</sub><sub>xp</sub><sub>matches.csv</sub> → Catalog of matched stars</li>
+<li>gaia<sub>spectra</sub><sub>CenAXX</sub>/ → Directory with spectra in ASCII format</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org4534fe4" class="outline-4">
+<h4 id="org4534fe4"><span class="section-number-4">3.2.5.</span> Notes</h4>
+<div class="outline-text-4" id="text-3-2-5">
+<ul class="org-ul">
+<li>~100 stars per field used as references</li>
+<li>Script performs cross-match between SPLUS detections and Gaia DR3</li>
+<li>Downloads XP spectra for matched stars</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgee79c52" class="outline-3">
+<h3 id="orgee79c52"><span class="section-number-3">3.3.</span> Step 2: Synthetic Photometry</h3>
+<div class="outline-text-3" id="text-3-3">
+</div>
+<div id="outline-container-org1d95522" class="outline-4">
+<h4 id="org1d95522"><span class="section-number-4">3.3.1.</span> Objective</h4>
+<div class="outline-text-4" id="text-3-3-1">
+<p>
+Calculate synthetic SPLUS magnitudes from Gaia XP spectra.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org98e398a" class="outline-4">
+<h4 id="org98e398a"><span class="section-number-4">3.3.2.</span> Execution Command</h4>
+<div class="outline-text-4" id="text-3-3-2">
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #00ffff;">for</span> D<span style="color: #00ffff;"> in</span> ./gaia_spectra_CenA*; <span style="color: #00ffff;">do</span> 
+    <span style="color: #00ffff;">if</span> [ -d <span style="color: #ffa07a;">"$D"</span> ]; <span style="color: #00ffff;">then</span> 
+        <span style="color: #b0c4de;">cd</span> <span style="color: #ffa07a;">"$D"</span>; 
+        <span style="color: #00ffff;">for</span> f<span style="color: #00ffff;"> in</span> *.dat; <span style="color: #00ffff;">do</span> 
+            python ../../programs/symphotometry.py ${<span style="color: #eedd82;">f</span>%.dat} --filters SPLUS21 --name Ref --savefig --debug; 
+        <span style="color: #00ffff;">done</span>; 
+        <span style="color: #b0c4de;">cd</span> ..; 
+    <span style="color: #00ffff;">fi</span>; 
+<span style="color: #00ffff;">done</span>
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org2b2e375" class="outline-4">
+<h4 id="org2b2e375"><span class="section-number-4">3.3.3.</span> Parameters</h4>
+<div class="outline-text-4" id="text-3-3-3">
+<ul class="org-ul">
+<li>&#x2013;filters SPLUS21 → SPLUS filters (12 bands)</li>
+<li>&#x2013;savefig → Save diagnostic plots</li>
+<li>&#x2013;debug → Verbose mode for debugging</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgdedf98c" class="outline-4">
+<h4 id="orgdedf98c"><span class="section-number-4">3.3.4.</span> Outputs</h4>
+<div class="outline-text-4" id="text-3-3-4">
+<ul class="org-ul">
+<li>Synthetic magnitudes for all SPLUS filters</li>
+<li>Diagnostic plots (if &#x2013;savefig used)</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgf660c43" class="outline-3">
+<h3 id="orgf660c43"><span class="section-number-3">3.4.</span> Step 3: Zero-point Calculation</h3>
+<div class="outline-text-3" id="text-3-4">
+</div>
+<div id="outline-container-org05c8e11" class="outline-4">
+<h4 id="org05c8e11"><span class="section-number-4">3.4.1.</span> Objective</h4>
+<div class="outline-text-4" id="text-3-4-1">
+<p>
+Calculate photometric zero-points by comparing instrumental and synthetic magnitudes.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org52352b2" class="outline-4">
+<h4 id="org52352b2"><span class="section-number-4">3.4.2.</span> Individual Processing</h4>
+<div class="outline-text-4" id="text-3-4-2">
+<div class="org-src-container">
+<pre class="src src-sh">python ../Programs/calculate_zero_points.py CenA01_gaia_xp_matches.csv --json-dir . --plot
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org75210dc" class="outline-4">
+<h4 id="org75210dc"><span class="section-number-4">3.4.3.</span> Expected Output</h4>
+<div class="outline-text-4" id="text-3-4-3">
+<pre class="example" id="org47c8eb2">
+Processing field CenA01 with 396 stars
+mag_F378: 100 stars, Median ZP = 19.649 ± 0.049 (MAD)
+mag_F395: 100 stars, Median ZP = 19.683 ± 0.056 (MAD)
+...
+Results saved to CenA01_zero_points.csv
+Plot saved as CenA01_zero_points.png
+</pre>
+</div>
+</div>
+
+<div id="outline-container-org2ddb2d9" class="outline-4">
+<h4 id="org2ddb2d9"><span class="section-number-4">3.4.4.</span> Batch Processing (All Fields)</h4>
+<div class="outline-text-4" id="text-3-4-4">
+<div class="org-src-container">
+<pre class="src src-sh">python ../Programs/ZeroPoints_calculations.py
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org883ddbd" class="outline-4">
+<h4 id="org883ddbd"><span class="section-number-4">3.4.5.</span> Output Files</h4>
+<div class="outline-text-4" id="text-3-4-5">
+<ul class="org-ul">
+<li>all<sub>fields</sub><sub>zero</sub><sub>points</sub><sub>detailed.csv</sub> → Detailed results</li>
+<li>average<sub>zero</sub><sub>points</sub><sub>detailed.csv</sub> → Average zero-points with uncertainties</li>
+<li>all<sub>fields</sub><sub>zero</sub><sub>points</sub><sub>splus</sub><sub>format.csv</sub> → Zero-points in SPLUS format</li>
+<li>average<sub>zero</sub><sub>points</sub><sub>splus</sub><sub>format.csv</sub> → Average zero-points in SPLUS format</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org621674f" class="outline-4">
+<h4 id="org621674f"><span class="section-number-4">3.4.6.</span> Statistical Summary</h4>
+<div class="outline-text-4" id="text-3-4-6">
+<pre class="example" id="org5136667">
+=== SPLUS FORMAT SUMMARY ===
+Processed 24 fields
+F378: 19.534433 ± 0.124996
+F395: 19.626046 ± 0.121728
+...
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org186a1e2" class="outline-3">
+<h3 id="org186a1e2"><span class="section-number-3">3.5.</span> Step 4: Globular Cluster Photometry</h3>
+<div class="outline-text-3" id="text-3-5">
+</div>
+<div id="outline-container-orgb733fa3" class="outline-4">
+<h4 id="orgb733fa3"><span class="section-number-4">3.5.1.</span> Objective</h4>
+<div class="outline-text-4" id="text-3-5-1">
+<p>
+Perform aperture photometry of globular clusters using the calculated zero-points.
+</p>
+</div>
+</div>
+
+<div id="outline-container-org7965162" class="outline-4">
+<h4 id="org7965162"><span class="section-number-4">3.5.2.</span> Main Script</h4>
+<div class="outline-text-4" id="text-3-5-2">
+<div class="org-src-container">
+<pre class="src src-sh">python Splus_photometry_final.py
+</pre>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orga9ca3f5" class="outline-4">
+<h4 id="orga9ca3f5"><span class="section-number-4">3.5.3.</span> Main Inputs</h4>
+<div class="outline-text-4" id="text-3-5-3">
+<ul class="org-ul">
+<li>TAP<sub>1</sub><sub>J</sub><sub>MNRAS</sub><sub>3444</sub><sub>gc.csv</sub> → Globular cluster catalog</li>
+<li>all<sub>fields</sub><sub>zero</sub><sub>points</sub><sub>splus</sub><sub>format.csv</sub> → Zero-points for all fields</li>
+<li>SPLUS images for each field and filter</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org7617518" class="outline-4">
+<h4 id="org7617518"><span class="section-number-4">3.5.4.</span> Photometry Parameters</h4>
+<div class="outline-text-4" id="text-3-5-4">
+<ul class="org-ul">
+<li>Apertures: 3, 4, 5, 6 arcsec (diameter)</li>
+<li>Background annulus: 6-9 arcsec</li>
+<li>Minimum SNR: 3</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org8afeb9f" class="outline-4">
+<h4 id="org8afeb9f"><span class="section-number-4">3.5.5.</span> Outputs</h4>
+<div class="outline-text-4" id="text-3-5-5">
+<ul class="org-ul">
+<li>CenAXX<sub>gc</sub><sub>photometry.csv</sub> → Individual field results</li>
+<li>all<sub>fields</sub><sub>gc</sub><sub>photometry</sub><sub>merged.csv</sub> → Final combined catalog</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org1c993ab" class="outline-4">
+<h4 id="org1c993ab"><span class="section-number-4">3.5.6.</span> Final Catalog Structure</h4>
+<div class="outline-text-4" id="text-3-5-6">
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-left" />
+
+<col  class="org-left" />
+
+<col  class="org-left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-left">Column</th>
+<th scope="col" class="org-left">Description</th>
+<th scope="col" class="org-left">Special Values</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-left">[Original columns]</td>
+<td class="org-left">From TAP<sub>1</sub><sub>J</sub><sub>MNRAS</sub><sub>3444</sub><sub>gc</sub> catalog</td>
+<td class="org-left">&#xa0;</td>
+</tr>
+
+<tr>
+<td class="org-left">FLUX<sub>FXXX</sub><sub>Y</sub></td>
+<td class="org-left">Flux in filter FXXX with aperture Y arcsec</td>
+<td class="org-left">0.0 = Not measured</td>
+</tr>
+
+<tr>
+<td class="org-left">FLUXERR<sub>FXXX</sub><sub>Y</sub></td>
+<td class="org-left">Flux error</td>
+<td class="org-left">99.0 = Measurement error</td>
+</tr>
+
+<tr>
+<td class="org-left">MAG<sub>FXXX</sub><sub>Y</sub></td>
+<td class="org-left">Magnitude</td>
+<td class="org-left">99.0 = Source not detectable</td>
+</tr>
+
+<tr>
+<td class="org-left">MAGERR<sub>FXXX</sub><sub>Y</sub></td>
+<td class="org-left">Magnitude error</td>
+<td class="org-left">99.0 = Measurement error</td>
+</tr>
+
+<tr>
+<td class="org-left">SNR<sub>FXXX</sub><sub>Y</sub></td>
+<td class="org-left">Signal-to-noise ratio</td>
+<td class="org-left">0.0 = Not measured</td>
+</tr>
+
+<tr>
+<td class="org-left">FIELD</td>
+<td class="org-left">SPLUS field where source was measured</td>
+<td class="org-left">NaN = Source not in field</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org9888558" class="outline-2">
+<h2 id="org9888558"><span class="section-number-2">4.</span> Execution Instructions</h2>
+<div class="outline-text-2" id="text-4">
+</div>
+<div id="outline-container-org54095ed" class="outline-3">
+<h3 id="org54095ed"><span class="section-number-3">4.1.</span> Initial Setup</h3>
+<div class="outline-text-3" id="text-4-1">
+<ol class="org-ol">
+<li>Ensure correct directory structure</li>
+<li>Verify all SPLUS fields are available</li>
+<li>Confirm location of globular cluster catalog</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org237ce04" class="outline-3">
+<h3 id="org237ce04"><span class="section-number-3">4.2.</span> Execution Order</h3>
+<div class="outline-text-3" id="text-4-2">
+<ol class="org-ol">
+<li>Extract Gaia XP spectra → Step 1</li>
+<li>Generate synthetic photometry → Step 2</li>
+<li>Calculate zero-points → Step 3</li>
+<li>Run cluster photometry → Step 4</li>
+</ol>
+</div>
+</div>
+
+<div id="outline-container-org1813b58" class="outline-3">
+<h3 id="org1813b58"><span class="section-number-3">4.3.</span> Complete Reprocessing Command</h3>
+<div class="outline-text-3" id="text-4-3">
+<div class="org-src-container">
+<pre class="src src-sh"><span style="color: #ff7f24;"># </span><span style="color: #ff7f24;">Step 1: Extract XP spectra</span>
+python ../Programs/extract_splus_gaia_xp_final.py
+
+<span style="color: #ff7f24;"># </span><span style="color: #ff7f24;">Step 2: Synthetic photometry (run in spectra directory)</span>
+<span style="color: #00ffff;">for</span> D<span style="color: #00ffff;"> in</span> ./gaia_spectra_CenA*; <span style="color: #00ffff;">do</span> 
+    <span style="color: #00ffff;">if</span> [ -d <span style="color: #ffa07a;">"$D"</span> ]; <span style="color: #00ffff;">then</span> 
+        <span style="color: #b0c4de;">cd</span> <span style="color: #ffa07a;">"$D"</span>; 
+        <span style="color: #00ffff;">for</span> f<span style="color: #00ffff;"> in</span> *.dat; <span style="color: #00ffff;">do</span> 
+            python ../../programs/symphotometry.py ${<span style="color: #eedd82;">f</span>%.dat} --filters SPLUS21 --name Ref --savefig; 
+        <span style="color: #00ffff;">done</span>; 
+        <span style="color: #b0c4de;">cd</span> ..; 
+    <span style="color: #00ffff;">fi</span>; 
+<span style="color: #00ffff;">done</span>
+
+<span style="color: #ff7f24;"># </span><span style="color: #ff7f24;">Step 3: Zero-point calculation</span>
+python ../Programs/ZeroPoints_calculations.py
+
+<span style="color: #ff7f24;"># </span><span style="color: #ff7f24;">Step 4: Cluster photometry</span>
+python Splus_photometry_final.py
+</pre>
+</div>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org15d2d37" class="outline-2">
+<h2 id="org15d2d37"><span class="section-number-2">5.</span> Troubleshooting</h2>
+<div class="outline-text-2" id="text-5">
+</div>
+<div id="outline-container-orgc7b8bde" class="outline-3">
+<h3 id="orgc7b8bde"><span class="section-number-3">5.1.</span> Common Issues</h3>
+<div class="outline-text-3" id="text-5-1">
+</div>
+<div id="outline-container-org6e88380" class="outline-4">
+<h4 id="org6e88380"><span class="section-number-4">5.1.1.</span> SPLUS Images Not Found</h4>
+<div class="outline-text-4" id="text-5-1-1">
+<ul class="org-ul">
+<li>Verify directory structure</li>
+<li>Ensure images follow correct naming convention</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org24f4434" class="outline-4">
+<h4 id="org24f4434"><span class="section-number-4">5.1.2.</span> No Zero-points for a Field</h4>
+<div class="outline-text-4" id="text-5-1-2">
+<ul class="org-ul">
+<li>Verify field is in all<sub>fields</sub><sub>zero</sub><sub>points</sub><sub>splus</sub><sub>format.csv</sub></li>
+<li>Check zero-point calculation for that specific field</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgb2717c5" class="outline-4">
+<h4 id="orgb2717c5"><span class="section-number-4">5.1.3.</span> Sources Near Edge</h4>
+<div class="outline-text-4" id="text-5-1-3">
+<ul class="org-ul">
+<li>Script automatically flags with 99.0 for edge sources</li>
+<li>Consider using smaller aperture for these sources</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orga67bc1d" class="outline-3">
+<h3 id="orga67bc1d"><span class="section-number-3">5.2.</span> Result Interpretation</h3>
+<div class="outline-text-3" id="text-5-2">
+<ul class="org-ul">
+<li>Magnitude values of 99.0: Source detected but not properly measured</li>
+<li>NaN values: Source not in field</li>
+<li>SNR &lt; 3: Measurements considered unreliable</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org266151e" class="outline-2">
+<h2 id="org266151e"><span class="section-number-2">6.</span> Results and Products</h2>
+<div class="outline-text-2" id="text-6">
+</div>
+<div id="outline-container-orge11ef5f" class="outline-3">
+<h3 id="orge11ef5f"><span class="section-number-3">6.1.</span> Generated Catalogs</h3>
+<div class="outline-text-3" id="text-6-1">
+<ul class="org-ul">
+<li>all<sub>fields</sub><sub>gc</sub><sub>photometry</sub><sub>merged.csv</sub> → Main catalog with all measurements</li>
+<li>CenAXX<sub>gc</sub><sub>photometry.csv</sub> → Individual field results</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org06600f9" class="outline-3">
+<h3 id="org06600f9"><span class="section-number-3">6.2.</span> Output Formats</h3>
+<div class="outline-text-3" id="text-6-2">
+<ul class="org-ul">
+<li>CSV with columns organized by filter and aperture</li>
+<li>Special values: 99.0 for failed measurements, NaN for out-of-field sources</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org9bdf5eb" class="outline-3">
+<h3 id="org9bdf5eb"><span class="section-number-3">6.3.</span> Quality Analysis</h3>
+<div class="outline-text-3" id="text-6-3">
+<ul class="org-ul">
+<li>Script includes statistical summary of data quality</li>
+<li>Reports number of valid measurements per filter and aperture</li>
+<li>Provides average SNR and average magnitude per filter</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-orgde6abdd" class="outline-2">
+<h2 id="orgde6abdd"><span class="section-number-2">7.</span> Technical Notes</h2>
+<div class="outline-text-2" id="text-7">
+</div>
+<div id="outline-container-org18b4029" class="outline-3">
+<h3 id="org18b4029"><span class="section-number-3">7.1.</span> System Requirements</h3>
+<div class="outline-text-3" id="text-7-1">
+<ul class="org-ul">
+<li>Python 3.7+</li>
+<li>Memory: ≥8GB RAM recommended for processing all fields</li>
+<li>Storage: ~50GB for SPLUS images + results</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-org994c76e" class="outline-3">
+<h3 id="org994c76e"><span class="section-number-3">7.2.</span> Python Dependencies</h3>
+<div class="outline-text-3" id="text-7-2">
+<ul class="org-ul">
+<li>astropy, numpy, pandas, photutils, tqdm, matplotlib</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-orgd4c22fe" class="outline-3">
+<h3 id="orgd4c22fe"><span class="section-number-3">7.3.</span> Estimated Execution Time</h3>
+<div class="outline-text-3" id="text-7-3">
+<ul class="org-ul">
+<li>Complete run: 6-12 hours (hardware dependent)</li>
+<li>Per field: 15-30 minutes</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div id="outline-container-org5690c85" class="outline-2">
+<h2 id="org5690c85"><span class="section-number-2">8.</span> Contact and References</h2>
+<div class="outline-text-2" id="text-8">
+<ul class="org-ul">
+<li>Author: Luis A. Gutiérrez Soto</li>
+<li>Email: gsoto.angel@gmail.com</li>
+<li>Catalog reference: TAP<sub>1</sub><sub>J</sub><sub>MNRAS</sub><sub>3444</sub><sub>gc.csv</sub> (Taylor et al. 2017, MNRAS, 3444)</li>
+<li>SPLUS Survey: Mendes de Oliveira et al. (2019)</li>
+</ul>
+
+<p>
+#+BEGIN<sub>CENTER</sub>
+</p>
+</div>
+</div>
+<div id="outline-container-org124eb59" class="outline-2">
+<h2 id="org124eb59"><span class="section-number-2">9.</span> Documentation last updated: 15/09/2025 *</h2>
+<div class="outline-text-2" id="text-9">
+<p>
+#+END<sub>CENTER</sub>
+</p>
+</div>
+</div>
+</div>
+<div id="postamble" class="status">
+<p class="date">Date: 15/09/2025</p>
+<p class="author">Author: Luis A. Gutiérrez Soto</p>
+<p class="date">Created: 2025-09-15 Mon 21:31</p>
+<p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
+</div>
+</body>
+</html>
