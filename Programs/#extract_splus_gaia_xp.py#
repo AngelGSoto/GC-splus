@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+
+"""
+extract_splus_gaia_xp.py
+
+Extrae coincidencias entre estrellas en imágenes S-PLUS no calibradas y Gaia DR3 con espectros XP,
+descarga los espectros XP para posterior calibración mediante fotometría sintética.
+
+Requiere:
+- Astropy, photutils, astroquery, pandas, numpy, scipy, requests
+"""
+
+import os
+import numpy as np
+import pandas as pd
+from astropy.io import fits
+from astropy.wcs import WCS
+from astropy.stats import mad_std
+from photutils.detection import DAOStarFinder
+from photutils.background import Background2D, MedianBackground
+from photutils.aperture import CircularAperture, aperture_photometry
+from astroquery.gaia import Gaia
+from scipy.spatial import KDTree
+import warnings
+import requests
+import time
+warnings.filterwarnings('ignore')
+
+# --------------------------- CONFIGURACIÓN ---------------------------
+SPLUS_FILTERS = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
+IMAGE_TEMPLATE = 'CenA01_{filter}.fits'
+MATCH_RADIUS_ARCSEC = 1.0
+FIELD_RADIUS_DEG = 1.0
+MIN_CAL_STARS = 5
+OUTPUT_TABLE = 'splus_gaia_xp_matches.csv'
+XP_SPECTRA_FOLDER = 'xp_spectra_files'
+os.makedirs(XP_SPECTRA_FOLDER, exist_ok=True)
+
+# --------------------------- FUNCIONES ---------------------------
+
+def extract_stars(image_file, threshold_sigma=3, fwhm=3.0, max_stars=5000):
+    """Extrae estrellas de una imagen S-PLUS y calcula magnitudes instrumentales."""
+    try:
+        with fits.open(image_file) as hdul:
+            for hdu in hdul:
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    data = hdu.data.astype(float)
+                    header = hdu.header
+                    break
+            else:
+                print(f"No se encontraron datos en {image_file}")
+                return pd.DataFrame()
+        
+        # Intentar obtener WCS
+        try:
+            wcs = WCS(header)
+            has_wcs = True
+        except:
+            print(f"Advertencia: No se pudo interpretar WCS en {image_file}")
+            has_wcs = False
+        
+        # Estimación de fondo
+        bkg_estimator = MedianBackground()
+        bkg = Background2D(data, box_size=(50, 50), filter_size=(3, 3), bkg_estimator=bkg_estimator)
+        data_sub = data - bkg.background
+        
+        # Detección de estrellas
+        std = mad_std(data_sub)
+        daofind = DAOStarFinder(fwhm=fwhm, threshold=threshold_sigma*std)
+        sources = daofind(data_sub)
+        
+        if sources is None:
+            print(f"No se detectaron estrellas en {image_file}")
+            return pd.DataFrame()
+            
+        sources = sources.to_pandas()
+        
+        # Fotometría de apertura
+        positions = np.transpose([sources['xcentroid'], sources['ycentroid']])
+        aperture = CircularAperture(positions, r=fwhm*2.0)
+        phot_table = aperture_photometry(data_sub, aperture)
+        sources['flux_aperture'] = phot_table['aperture_sum']
+        
+        # Magnitud instrumental (sin zeropoint)
+        sources['mag_inst'] = -2.5 * np.log10(sources['flux_aperture'] + 1e-10)
+        
+        # Limitar número de estrellas si es necesario - por flujo (brillo)
+        if len(sources) > max_stars:
+            # Seleccionar las estrellas más brillantes (mayor flujo)
+            sources = sources.nlargest(max_stars, 'flux_aperture')
+            print(f"Se seleccionaron las {max_stars} estrellas más brillantes en {image_file}")
+
+            
+        # Coordenadas astronómicas si hay WCS
+        if has_wcs:
+            coords = wcs.pixel_to_world(sources['xcentroid'], sources['ycentroid'])
+            sources['ra'] = coords.ra.deg
+            sources['dec'] = coords.dec.deg
+        else:
+            print(f"Advertencia: No hay WCS en {image_file}, no se pueden obtener coordenadas")
+            sources['ra'] = np.nan
+            sources['dec'] = np.nan
+            
+        return sources[['ra', 'dec', 'flux_aperture', 'mag_inst']]
+        
+    except Exception as e:
+        print(f"Error en extracción de estrellas de {image_file}: {e}")
+        return pd.DataFrame()
+
+def sph_to_cart(ra_arr, dec_arr):
+    """Convierte coordenadas esféricas (RA, Dec) a coordenadas cartesianas."""
+    phi = np.radians(ra_arr)
+    theta = np.radians(90.0 - dec_arr)
+    x = np.sin(theta) * np.cos(phi)
+    y = np.sin(theta) * np.sin(phi)
+    z = np.cos(theta)
+    return np.vstack([x, y, z]).T
+
+def crossmatch_kdtree(stars, gaia_df, match_radius_arcsec=1.0):
+    """Realiza un cruce espacial entre catálogos usando KDTree."""
+    if len(stars) == 0 or len(gaia_df) == 0:
+        return pd.DataFrame()
+        
+    stars_ra = stars['ra'].values
+    stars_dec = stars['dec'].values
+    gaia_ra = gaia_df['ra'].values
+    gaia_dec = gaia_df['dec'].values
+    
+    radius_deg = match_radius_arcsec / 3600.0
+    gaia_points = sph_to_cart(gaia_ra, gaia_dec)
+    tree = KDTree(gaia_points)
+    stars_points = sph_to_cart(stars_ra, stars_dec)
+    
+    distances, indices = tree.query(stars_points, k=1)
+    angular_distances_deg = 2 * np.arcsin(distances / 2) * 180 / np.pi
+    mask = angular_distances_deg < radius_deg
+    
+    matched = stars.iloc[mask].copy()
+    matched['gaia_idx'] = indices[mask]
+    matched['distance_arcsec'] = angular_distances_deg[mask] * 3600
+    
+    # Añadir datos de Gaia
+    for col in gaia_df.columns:
+        if col not in matched.columns:
+            matched[f'gaia_{col}'] = gaia_df.iloc[indices[mask]][col].values
+            
+    return matched
+
+def query_gaia_sources(ra_center, dec_center, radius_deg=1.0, max_retries=3):
+    """Consulta fuentes Gaia DR3 con espectros XP en la región de interés."""
+    for attempt in range(max_retries):
+        try:
+            # Limitar el número de resultados para evitar timeouts
+            adql = f"""
+            SELECT 
+                source_id, ra, dec, 
+                phot_g_mean_mag, phot_bp_mean_mag, phot_rp_mean_mag, 
+                ruwe, parallax, pmra, pmdec
+            FROM gaiadr3.gaia_source
+            WHERE 
+                1=CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra_center}, {dec_center}, {radius_deg}))
+                AND has_xp_continuous = 'True'
+                AND phot_g_mean_mag BETWEEN 12 AND 19
+                AND ruwe < 1.4
+            """
+            
+            print(f"Ejecutando consulta ADQL en Gaia (intento {attempt+1}/{max_retries})...")
+            job = Gaia.launch_job_async(adql, dump_to_file=False)
+            r = job.get_results()
+            print(f"Se encontraron {len(r)} fuentes Gaia con espectros XP")
+            return r
+        except Exception as e:
+            print(f"Error en consulta Gaia (intento {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                # Esperar antes de reintentar
+                time.sleep(10)
+            else:
+                return None
+
+def download_xp_spectrum(source_id, outfolder=XP_SPECTRA_FOLDER, max_retries=3):
+    """Descarga el espectro XP de una fuente Gaia con reintentos."""
+    for attempt in range(max_retries):
+        try:
+            # Asegurarse de que el source_id sea un entero largo
+            source_id_int = int(float(source_id))
+            source_id_str = str(source_id_int)
+            filename = os.path.join(outfolder, f'{source_id_str}_xp.xml')
+            
+            # Si ya existe, no descargar de nuevo
+            if os.path.exists(filename):
+                print(f"Espectro XP para {source_id_str} ya existe")
+                return filename
+                
+            # Pequeña pausa entre solicitudes para evitar sobrecargar el servidor
+            time.sleep(1)  # Aumentamos el tiempo de espera a 1 segundo
+            
+            # URL de descarga directa para espectros XP (según documentación de Gaia)
+            xp_url = f"https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID={source_id_str}&FORMAT=XML"
+            
+            # Descargar el archivo
+            print(f"Descargando espectro XP para {source_id_str} (intento {attempt+1})...")
+            
+            # Configurar headers para la solicitud
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
+            # Realizar la solicitud con timeout y headers
+            r = requests.get(xp_url, headers=headers, timeout=60)
+            r.raise_for_status()
+            
+            # Verificar que la respuesta no sea un error
+            if "Error" in r.text:
+                print(f"El servidor devolvió un error para {source_id_str}")
+                return ""
+                
+            with open(filename, 'wb') as f:
+                f.write(r.content)
+                
+            print(f"Espectro XP guardado en {filename}")
+            return filename
+            
+        except requests.exceptions.HTTPError as errh:
+            print(f"Error HTTP para {source_id}: {errh}")
+            if attempt < max_retries - 1:
+                time.sleep(5)  # Esperar más tiempo antes de reintentar
+            else:
+                return ""
+        except requests.exceptions.ConnectionError as errc:
+            print(f"Error de conexión para {source_id}: {errc}")
+            if attempt < max_retries - 1:
+                time.sleep(10)  # Esperar más tiempo antes de reintentar
+            else:
+                return ""
+        except requests.exceptions.Timeout as errt:
+            print(f"Timeout para {source_id}: {errt}")
+            if attempt < max_retries - 1:
+                time.sleep(10)  # Esperar más tiempo antes de reintentar
+            else:
+                return ""
+        except Exception as e:
+            print(f"Error descargando XP spectrum para {source_id} (intento {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)  # Esperar antes de reintentar
+            else:
+                return ""
+
+def create_merged_catalog(band_catalogs):
+    """Crea un catálogo combinado de todas las bandas S-PLUS."""
+    if not band_catalogs:
+        return pd.DataFrame()
+        
+    # Encontrar la banda con más estrellas como referencia
+    ref_band = max(band_catalogs, key=lambda k: len(band_catalogs[k]))
+    print(f"Usando {ref_band} como banda de referencia ({len(band_catalogs[ref_band])} estrellas)")
+    
+    merged_cat = band_catalogs[ref_band][['ra', 'dec']].copy()
+    merged_cat[f'mag_{ref_band}'] = band_catalogs[ref_band]['mag_inst']
+    
+    # Para cada otra banda, encontrar las estrellas más cercanas
+    for band, cat in band_catalogs.items():
+        if band == ref_band:
+            continue
+            
+        # Filtrar estrellas con coordenadas válidas
+        valid_idx = ~(np.isnan(cat['ra']) | np.isnan(cat['dec']))
+        if not any(valid_idx):
+            print(f"{band}: No hay coordenadas válidas")
+            merged_cat[f'mag_{band}'] = np.nan
+            continue
+            
+        valid_cat = cat[valid_idx]
+        
+        # Cruzar por posición
+        band_points = sph_to_cart(valid_cat['ra'].values, valid_cat['dec'].values)
+        ref_points = sph_to_cart(merged_cat['ra'].values, merged_cat['dec'].values)
+        tree = KDTree(band_points)
+        distances, indices = tree.query(ref_points, k=1)
+        
+        # Convertir distancias a arcsegundos
+        angular_distances_arcsec = 2 * np.arcsin(distances / 2) * 180 / np.pi * 3600
+        mask = angular_distances_arcsec < MATCH_RADIUS_ARCSEC
+        
+        # Añadir magnitudes de esta banda
+        merged_cat[f'mag_{band}'] = np.nan
+        merged_cat.loc[mask, f'mag_{band}'] = valid_cat.iloc[indices[mask]]['mag_inst'].values
+        
+        print(f"{band}: {np.sum(mask)} estrellas coincidentes con la banda de referencia")
+    
+    return merged_cat
+
+# --------------------------- PROCESAMIENTO PRINCIPAL ---------------------------
+
+def main():
+    # Extraer estrellas en cada filtro
+    print("Extrayendo estrellas en todas las bandas S-PLUS...")
+    band_catalogs = {}
+    
+    for band in SPLUS_FILTERS:
+        image_file = IMAGE_TEMPLATE.format(filter=band)
+        if not os.path.exists(image_file):
+            print(f"Imagen {image_file} no encontrada. Saltando...")
+            continue
+            
+        cat = extract_stars(image_file)
+        if len(cat) == 0:
+            print(f"{band}: No se extrajeron estrellas.")
+            continue
+            
+        band_catalogs[band] = cat
+        print(f"{band}: {len(cat)} estrellas extraídas.")
+
+    if not band_catalogs:
+        print("No se pudieron extraer estrellas de ninguna banda.")
+        return
+
+    # Crear catálogo combinado
+    print("Combinando catálogos de todas las bandas...")
+    merged_cat = create_merged_catalog(band_catalogs)
+    
+    if len(merged_cat) == 0:
+        print("No se pudo crear catálogo combinado.")
+        return
+        
+    # Calcular centro del campo
+    valid_coords = ~(np.isnan(merged_cat['ra']) | np.isnan(merged_cat['dec']))
+    if not any(valid_coords):
+        print("No hay coordenadas válidas en el catálogo combinado.")
+        return
+        
+    ra_c = float(np.nanmedian(merged_cat.loc[valid_coords, 'ra']))
+    dec_c = float(np.nanmedian(merged_cat.loc[valid_coords, 'dec']))
+    print(f"Centro del campo: RA={ra_c:.6f}, Dec={dec_c:.6f}")
+
+    # Consulta Gaia DR3 con reintentos
+    gaia_tbl = query_gaia_sources(ra_c, dec_c, radius_deg=FIELD_RADIUS_DEG, max_retries=5)
+    if gaia_tbl is None or len(gaia_tbl) == 0:
+        print("No se obtuvo catálogo Gaia en la región después de varios intentos.")
+        return
+        
+    gaia_df = gaia_tbl.to_pandas()
+    gaia_df.columns = [col.lower() for col in gaia_df.columns]
+
+    # Cruzar catálogos S-PLUS y Gaia por posición
+    matches = crossmatch_kdtree(merged_cat, gaia_df, match_radius_arcsec=MATCH_RADIUS_ARCSEC)
+    print(f"Coincidencias S-PLUS–Gaia dentro de {MATCH_RADIUS_ARCSEC}\": {len(matches)}")
+
+    if len(matches) == 0:
+        print("No hay coincidencias útiles.")
+        return
+        
+    if len(matches) < MIN_CAL_STARS:
+        print(f"Advertencia: Solo {len(matches)} coincidencias (mínimo recomendado: {MIN_CAL_STARS})")
+
+    # Descargar XP spectra de Gaia para cada fuente coincidente
+    print("Descargando espectros XP...")
+    xp_paths = []
+    
+    # Limitar el número de descargas para evitar sobrecargar el servidor
+    max_downloads = 100
+    download_count = 0
+    
+    for i, row in matches.iterrows():
+        if download_count >= max_downloads:
+            print(f"Se alcanzó el límite máximo de {max_downloads} descargas.")
+            break
+            
+        source_id = row['gaia_source_id']
+        xp_path = download_xp_spectrum(source_id)
+        xp_paths.append(xp_path)
+        download_count += 1
+        
+        # Pausa más larga cada 10 descargas
+        if download_count % 10 == 0:
+            print(f"Pausa de 5 segundos después de {download_count} descargas...")
+            time.sleep(5)
+        
+    matches['xp_spectrum_path'] = xp_paths
+
+    # Preparar tabla de salida
+    output_cols = ['gaia_source_id', 'gaia_ra', 'gaia_dec'] + \
+                 [f'mag_{band}' for band in SPLUS_FILTERS] + \
+                 ['distance_arcsec', 'xp_spectrum_path', 
+                  'gaia_phot_g_mean_mag', 'gaia_phot_bp_mean_mag', 'gaia_phot_rp_mean_mag',
+                  'gaia_ruwe', 'gaia_parallax', 'gaia_pmra', 'gaia_pmdec']
+    
+    # Filtrar columnas existentes
+    available_cols = [col for col in output_cols if col in matches.columns]
+    matches = matches[available_cols]
+    
+    # Renombrar columnas para claridad
+    matches = matches.rename(columns={
+        'gaia_source_id': 'source_id',
+        'gaia_ra': 'ra', 
+        'gaia_dec': 'dec'
+    })
+    
+    # Guardar resultados
+    matches.to_csv(OUTPUT_TABLE, index=False)
+    print(f"Tabla final guardada en: {OUTPUT_TABLE}")
+    print(f"Coincidencias encontradas: {len(matches)}")
+    print(f"Espectros XP descargados: {sum(1 for p in xp_paths if p)}")
+
+if __name__ == '__main__':
+    main()

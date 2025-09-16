@@ -1,0 +1,6 @@
+Complex =>
+python splus_photometry_final.py --catalog catalogo_ngc5128.csv --images-dir /media/luis/Data/Descarga-automatica/anac_data/CenA01 --auto-calibrate
+
+Simples =>
+
+python simple_photometry.py

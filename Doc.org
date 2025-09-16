@@ -1,0 +1,261 @@
+#+TITLE: Photometric Analysis of Globular Clusters in NGC 5128 (Centaurus A)
+#+AUTHOR: Luis A. Gutiérrez Soto
+#+DATE: 15/09/2025
+#+DESCRIPTION: Complete pipeline for photometric analysis of globular clusters in Centaurus A using SPLUS data
+#+STARTUP: showall
+
+* Introduction
+** NGC 5128 (Centaurus A)
+Centaurus A (also known as NGC 5128 or Caldwell 77) is a galaxy in the constellation of Centaurus.
+It was discovered in 1826 by Scottish astronomer James Dunlop from his home in Parramatta,
+in New South Wales, Australia. 
+
+*** Key Properties
+- Hubble type: Lenticular galaxy or giant elliptical galaxy (debated in literature)
+- Distance: 11-13 million light-years (uncertain)
+- Significance:
+  - Closest radio galaxy to Earth
+  - Closest BL Lac object
+  - Fifth-brightest galaxy in the sky
+- Visibility: Only visible from the southern hemisphere and low northern latitudes
+
+** Project Objective
+Perform aperture photometry of globular clusters in NGC 5128 using data from the SPLUS (Southern Photometric Local Universe Survey).
+
+* Project Structure
+** Main Directories
+.
+├── anac_data/                 # SPLUS data (by field)
+├── Programs/             # Python scripts
+├── programss/            # Python scripts to do synthetic photometry
+├── Results/             # Photometry results
+└── Documentation/       # Documentation (this file)
+
+** Processed SPLUS Fields
+| Field  | RA       | DEC      | Notes |
+|--------+----------+----------+-------|
+| CenA01 | 200.1234 | -47.2345 |       |
+| ...    | ...      | ...      |       |
+| CenA24 | 200.5678 | -46.7890 |       |
+
+* Methodology
+** Pipeline Summary
+1. Estimate instrumetal photometry for refereces stars
+2. Extraction of Gaia XP spectra for reference stars
+3. Generation of synthetic photometry from XP spectra
+4. Zero-point calculation for each field
+5. Aperture photometry of globular clusters
+
+** Step 1: Extraction of Gaia XP Spectra
+*** Objective
+Identify stars in each SPLUS field and estimate the intrumentl
+magnitude using the python pagcage photutils obtain their
+Gaia DR3 XP spectra for calibration.
+
+*** Script Used
+#+BEGIN_SRC sh
+python ../Programs/extract_splus_gaia_xp_final.py
+#+END_SRC
+
+*** Inputs
+- SPLUS images for each field
+- Gaia DR3 catalog (automatically queried)
+
+*** Outputs
+- CenAXX_gaia_xp_matches.csv → Catalog of matched stars
+- gaia_spectra_CenAXX/ → Directory with spectra in ASCII format
+
+*** Notes
+- ~100 stars per field used as references
+- Script performs cross-match between SPLUS detections and Gaia DR3
+- Downloads XP spectra for matched stars
+
+** Step 2: Synthetic Photometry
+*** Objective
+Calculate synthetic SPLUS magnitudes from Gaia XP spectra.
+
+*** Execution Command
+#+BEGIN_SRC sh
+for D in ./gaia_spectra_CenA*; do 
+    if [ -d "$D" ]; then 
+        cd "$D"; 
+        for f in *.dat; do 
+            python ../../programs/symphotometry.py ${f%.dat} --filters SPLUS21 --name Ref --savefig --debug; 
+        done; 
+        cd ..; 
+    fi; 
+done
+#+END_SRC
+
+*** Parameters
+- --filters SPLUS21 → SPLUS filters (12 bands)
+- --savefig → Save diagnostic plots
+- --debug → Verbose mode for debugging
+
+*** Outputs
+- Synthetic magnitudes for all SPLUS filters
+- Diagnostic plots (if --savefig used)
+
+** Step 3: Zero-point Calculation
+*** Objective
+Calculate photometric zero-points by comparing instrumental and synthetic magnitudes.
+
+*** Individual Processing
+#+BEGIN_SRC sh
+python ../Programs/calculate_zero_points.py CenA01_gaia_xp_matches.csv --json-dir . --plot
+#+END_SRC
+
+*** Expected Output
+#+BEGIN_EXAMPLE
+Processing field CenA01 with 396 stars
+mag_F378: 100 stars, Median ZP = 19.649 ± 0.049 (MAD)
+mag_F395: 100 stars, Median ZP = 19.683 ± 0.056 (MAD)
+...
+Results saved to CenA01_zero_points.csv
+Plot saved as CenA01_zero_points.png
+#+END_EXAMPLE
+
+*** Batch Processing (All Fields)
+#+BEGIN_SRC sh
+python ../Programs/ZeroPoints_calculations.py
+#+END_SRC
+
+*** Output Files
+- all_fields_zero_points_detailed.csv → Detailed results
+- average_zero_points_detailed.csv → Average zero-points with uncertainties
+- all_fields_zero_points_splus_format.csv → Zero-points in SPLUS format
+- average_zero_points_splus_format.csv → Average zero-points in SPLUS format
+
+*** Statistical Summary
+#+BEGIN_EXAMPLE
+=== SPLUS FORMAT SUMMARY ===
+Processed 24 fields
+F378: 19.534433 ± 0.124996
+F395: 19.626046 ± 0.121728
+...
+#+END_EXAMPLE
+
+** Step 4: Globular Cluster Photometry
+*** Objective
+Perform aperture photometry of globular clusters using the calculated zero-points.
+
+*** Main Script
+#+BEGIN_SRC sh
+python Splus_photometry_final.py
+#+END_SRC
+
+*** Main Inputs
+- TAP_1_J_MNRAS_3444_gc.csv → Globular cluster catalog
+- all_fields_zero_points_splus_format.csv → Zero-points for all fields
+- SPLUS images for each field and filter
+
+*** Photometry Parameters
+- Apertures: 3, 4, 5, 6 arcsec (diameter)
+- Background annulus: 6-9 arcsec
+- Minimum SNR: 3
+
+*** Outputs
+- CenAXX_gc_photometry.csv → Individual field results
+- all_fields_gc_photometry_merged.csv → Final combined catalog
+
+*** Final Catalog Structure
+| Column         | Description                                 | Special Values        |
+|-----------------+---------------------------------------------+---------------------------|
+| [Original columns] | From TAP_1_J_MNRAS_3444_gc catalog          |                           |
+| FLUX_FXXX_Y      | Flux in filter FXXX with aperture Y arcsec  | 0.0 = Not measured        |
+| FLUXERR_FXXX_Y   | Flux error                                  | 99.0 = Measurement error  |
+| MAG_FXXX_Y       | Magnitude                                   | 99.0 = Source not detectable |
+| MAGERR_FXXX_Y    | Magnitude error                             | 99.0 = Measurement error  |
+| SNR_FXXX_Y       | Signal-to-noise ratio                       | 0.0 = Not measured        |
+| FIELD            | SPLUS field where source was measured       | NaN = Source not in field |
+
+* Execution Instructions
+** Initial Setup
+1. Ensure correct directory structure
+2. Verify all SPLUS fields are available
+3. Confirm location of globular cluster catalog
+
+** Execution Order
+1. Extract Gaia XP spectra → Step 1
+2. Generate synthetic photometry → Step 2
+3. Calculate zero-points → Step 3
+4. Run cluster photometry → Step 4
+
+** Complete Reprocessing Command
+#+BEGIN_SRC sh
+# Step 1: Extract XP spectra
+python ../Programs/extract_splus_gaia_xp_final.py
+
+# Step 2: Synthetic photometry (run in spectra directory)
+for D in ./gaia_spectra_CenA*; do 
+    if [ -d "$D" ]; then 
+        cd "$D"; 
+        for f in *.dat; do 
+            python ../../programs/symphotometry.py ${f%.dat} --filters SPLUS21 --name Ref --savefig; 
+        done; 
+        cd ..; 
+    fi; 
+done
+
+# Step 3: Zero-point calculation
+python ../Programs/ZeroPoints_calculations.py
+
+# Step 4: Cluster photometry
+python Splus_photometry_final.py
+#+END_SRC
+
+* Troubleshooting
+** Common Issues
+*** SPLUS Images Not Found
+- Verify directory structure
+- Ensure images follow correct naming convention
+
+*** No Zero-points for a Field
+- Verify field is in all_fields_zero_points_splus_format.csv
+- Check zero-point calculation for that specific field
+
+*** Sources Near Edge
+- Script automatically flags with 99.0 for edge sources
+- Consider using smaller aperture for these sources
+
+** Result Interpretation
+- Magnitude values of 99.0: Source detected but not properly measured
+- NaN values: Source not in field
+- SNR < 3: Measurements considered unreliable
+
+* Results and Products
+** Generated Catalogs
+- all_fields_gc_photometry_merged.csv → Main catalog with all measurements
+- CenAXX_gc_photometry.csv → Individual field results
+
+** Output Formats
+- CSV with columns organized by filter and aperture
+- Special values: 99.0 for failed measurements, NaN for out-of-field sources
+
+** Quality Analysis
+- Script includes statistical summary of data quality
+- Reports number of valid measurements per filter and aperture
+- Provides average SNR and average magnitude per filter
+
+* Technical Notes
+** System Requirements
+- Python 3.7+
+- Memory: ≥8GB RAM recommended for processing all fields
+- Storage: ~50GB for SPLUS images + results
+
+** Python Dependencies
+- astropy, numpy, pandas, photutils, tqdm, matplotlib
+
+** Estimated Execution Time
+- Complete run: 6-12 hours (hardware dependent)
+- Per field: 15-30 minutes
+
+* Contact and References
+- Author: Luis A. Gutiérrez Soto
+- Email: gsoto.angel@gmail.com
+- Catalog reference: TAP_1_J_MNRAS_3444_gc.csv (Taylor et al. 2017, MNRAS, 3444)
+- SPLUS Survey: Mendes de Oliveira et al. (2019)
+
+#+BEGIN_CENTER
+* Documentation last updated: 15/09/2025 *
+#+END_CENTER

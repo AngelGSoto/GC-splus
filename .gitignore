@@ -39,4 +39,8 @@ temp/
 programs/pyraf/clcache.v2/
 
 # Ignorar archivos temporales o de respaldo que empiezan con #
+<<<<<<< HEAD
 programs/#*
+=======
+programs/#*
+>>>>>>> a97138a2aed9284bdece4fbc403080849c1eea9f
