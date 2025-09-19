@@ -158,6 +158,106 @@ python Splus_photometry_final.py
 - CenAXX_gc_photometry.csv → Individual field results
 - all_fields_gc_photometry_merged.csv → Final combined catalog
 
+*** Background correction
+Correcting the variable background of the galaxy is crucial for obtaining
+accurate photometry of the globular clusters in Centaurus A. This step was
+suggested by Ana after reviewing the initial results.
+We implement background subtraction using Photutils' Background2D, which
+models the variable background by dividing the image into boxes and fitting
+a background model in each box. This approach is more robust than a simple
+unsharp mask for this application.
+
+The script based on the last one is:
+
+
+#+BEGIN_SRC sh
+python Splus_photometry_final_bg_mask.py
+#+END_SRC
+
+**** Key parameters:
+
+    box_size = 50 pixels :: Size of the box for background estimation. This should be
+    larger than typical globular clusters but smaller than the background structures
+    of the galaxy.
+
+    filter_size = 3 :: Size of the filter to apply to the background map.
+
+    sigma_clip = SigmaClip(sigma=3.0) :: Sigma clipping parameters for excluding sources.
+
+    snr_threshold = 2 :: Signal-to-noise ratio for source detection in masking.
+
+    npixels = 5 :: Minimum number of connected pixels for source detection.
+
+    dilate_size = 11 :: Size of dilation kernel for expanding source masks.
+
+**** Implementation:
+The background subtraction is performed for each filter image before doing
+aperture photometry. We create a mask to exclude bright objects (stars and
+clusters) when estimating the background.
+
+**** Verification:
+We generate verification images for one
+filter per field (to avoid too many files) showing:
+
+....
+
+The terminal print (just runing for one field):
+
+#+BEGIN_SRC sh
+python ../Programs/Splus_photometry_final_bg_mask.py 
+Loaded catalog with 3210 sources
+Processing field CenA01
+Found 181 sources in field CenA01
+  Processing filter F378
+Background subtracted with box_size=50
+  Processing filter F395
+Background subtracted with box_size=50
+  Processing filter F410
+Background subtracted with box_size=50
+  Processing filter F430
+Background subtracted with box_size=50
+  Processing filter F515
+Background subtracted with box_size=50
+  Processing filter F660
+Saved background debug image for CenA01 F660
+Background subtracted with box_size=50
+Saved debug aperture image for CenA01 F660
+  Processing filter F861
+Background subtracted with box_size=50
+Saved results for CenA01 to CenA01_gc_photometry.csv
+Final merged results saved to all_fields_gc_photometry_merged.csv
+Total sources in original catalog: 3210
+Total sources with measurements: 181
+F378_3: 3169 valid, Mean SNR: 0.4, Mean Mag: 25.51
+F378_4: 3159 valid, Mean SNR: 0.4, Mean Mag: 25.28
+F378_5: 3162 valid, Mean SNR: 0.4, Mean Mag: 25.29
+F378_6: 3157 valid, Mean SNR: 0.5, Mean Mag: 25.26
+F395_3: 3166 valid, Mean SNR: 0.4, Mean Mag: 23.70
+F395_4: 3155 valid, Mean SNR: 0.5, Mean Mag: 23.45
+F395_5: 3145 valid, Mean SNR: 0.5, Mean Mag: 23.31
+F395_6: 3141 valid, Mean SNR: 0.6, Mean Mag: 23.37
+F410_3: 3171 valid, Mean SNR: 0.8, Mean Mag: 23.77
+F410_4: 3166 valid, Mean SNR: 0.9, Mean Mag: 23.71
+F410_5: 3158 valid, Mean SNR: 0.9, Mean Mag: 23.70
+F410_6: 3150 valid, Mean SNR: 1.0, Mean Mag: 23.75
+F430_3: 3178 valid, Mean SNR: 0.9, Mean Mag: 23.17
+F430_4: 3168 valid, Mean SNR: 1.0, Mean Mag: 23.08
+F430_5: 3160 valid, Mean SNR: 1.0, Mean Mag: 22.98
+F430_6: 3151 valid, Mean SNR: 1.1, Mean Mag: 23.01
+F515_3: 3182 valid, Mean SNR: 1.3, Mean Mag: 23.17
+F515_4: 3172 valid, Mean SNR: 1.4, Mean Mag: 23.10
+F515_5: 3165 valid, Mean SNR: 1.5, Mean Mag: 23.15
+F515_6: 3158 valid, Mean SNR: 1.5, Mean Mag: 23.33
+F660_3: 3180 valid, Mean SNR: 1.7, Mean Mag: 21.62
+F660_4: 3175 valid, Mean SNR: 1.8, Mean Mag: 21.55
+F660_5: 3165 valid, Mean SNR: 2.0, Mean Mag: 21.56
+F660_6: 3159 valid, Mean SNR: 2.1, Mean Mag: 21.53
+F861_3: 3183 valid, Mean SNR: 2.1, Mean Mag: 23.37
+F861_4: 3180 valid, Mean SNR: 2.2, Mean Mag: 23.29
+F861_5: 3172 valid, Mean SNR: 2.3, Mean Mag: 23.42
+F861_6: 3164 valid, Mean SNR: 2.5, Mean Mag: 23.48
+#+END_SRC
+
 *** Final Catalog Structure
 | Column         | Description                                 | Special Values        |
 |-----------------+---------------------------------------------+---------------------------|
@@ -259,5 +359,5 @@ python Splus_photometry_final.py
 - SPLUS Survey: Mendes de Oliveira et al. (2019)
 
 #+BEGIN_CENTER
-* Documentation last updated: 15/09/2025 *
+* Documentation last updated: 18/09/2025 *
 #+END_CENTER
