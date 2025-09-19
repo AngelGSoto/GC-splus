@@ -259,26 +259,31 @@ F861_5: 3172 valid, Mean SNR: 2.3, Mean Mag: 23.42
 F861_6: 3164 valid, Mean SNR: 2.5, Mean Mag: 23.48
 #+END_SRC
 
-*** Aperture correction
+*** Aperture Correction
 
-By suggestion of Juan we need to do aperture correction because we are using aperture fixed
-to do the photometry. Agrement we Juan this is because the image or filter are change for instance
-different seeing. I thin as wel this correction is necesary because we only have the
-narrow band filter form T80S (splus) and for broad band we will use the magnitude form the
-Taylor catalog which is based on Decam and used PSF photometry.
+By suggestion from Juan, we need to perform aperture correction
+because we are using fixed aperture photometry. This correction
+is necessary because the point spread function (PSF) can vary
+between images and filters due to different observing conditions
+(e.g., seeing, airmass). Additionally, this correction is
+essential to ensure consistency when comparing our narrow-band
+SPLUS photometry with the broad-band photometry from the Taylor
+catalog, which was obtained with DECam using PSF-fitting photometry.
 
-The script that made the aperture photometry now include this correction and is:
+The updated script that performs aperture photometry with aperture correction is:
 
 #+BEGIN_SRC sh
-  python ../Programs/Splus_photometry_final_bg_mask_aper_correction.py
+python ../Programs/Splus_photometry_final_bg_mask_aper_correction.py
 #+END_SRC
 
-Note that we are using the same star the references that previousle used to estimate the
-zeropoints to to this aperture correction.
+Note that we use the same reference stars that were previously
+used for zeropoint calibration to calculate the aperture correction
+factors. This ensures consistency throughout our photometric pipeline.
 
 Aster runing the:
 
 #+BEGIN_SRC sh
+  
 #+END_SRC
 
 
