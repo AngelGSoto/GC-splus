@@ -279,6 +279,102 @@ zeropoints to to this aperture correction.
 Aster runing the:
 
 #+BEGIN_SRC sh
+python ../Programs/Splus_photometry_final_bg_mask_aper_correction.py 
+2025-09-19 17:05:08,248 [INFO] Loaded catalog with 3210 sources
+2025-09-19 17:05:08,248 [INFO] Processing field CenA01
+2025-09-19 17:05:09,767 [INFO] Found 181 sources in field CenA01
+2025-09-19 17:05:09,767 [INFO]   Processing filter F378
+2025-09-19 17:06:27,982 [INFO] Background subtracted with box_size=50
+2025-09-19 17:06:27,989 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:07:46,055 [INFO] Background subtracted with box_size=50
+2025-09-19 17:07:46,065 [INFO] Aperture correction for CenA01 F378 3 arcsec: 1.489129292803999 (based on 396 stars)
+2025-09-19 17:07:46,065 [INFO] Aperture correction for CenA01 F378 4 arcsec: 1.489129292803999 (based on 396 stars)
+2025-09-19 17:07:46,065 [INFO] Aperture correction for CenA01 F378 5 arcsec: 1.489129292803999 (based on 396 stars)
+2025-09-19 17:07:46,065 [INFO] Aperture correction for CenA01 F378 6 arcsec: 1.489129292803999 (based on 396 stars)
+2025-09-19 17:07:46,104 [INFO]   Processing filter F395
+2025-09-19 17:08:59,224 [INFO] Background subtracted with box_size=50
+2025-09-19 17:08:59,231 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:10:12,856 [INFO] Background subtracted with box_size=50
+2025-09-19 17:10:12,866 [INFO] Aperture correction for CenA01 F395 3 arcsec: 1.570179672621956 (based on 396 stars)
+2025-09-19 17:10:12,866 [INFO] Aperture correction for CenA01 F395 4 arcsec: 1.570179672621956 (based on 396 stars)
+2025-09-19 17:10:12,866 [INFO] Aperture correction for CenA01 F395 5 arcsec: 1.570179672621956 (based on 396 stars)
+2025-09-19 17:10:12,867 [INFO] Aperture correction for CenA01 F395 6 arcsec: 1.570179672621956 (based on 396 stars)
+2025-09-19 17:10:12,906 [INFO]   Processing filter F410
+2025-09-19 17:11:27,059 [INFO] Background subtracted with box_size=50
+2025-09-19 17:11:27,066 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:12:41,986 [INFO] Background subtracted with box_size=50
+2025-09-19 17:12:41,996 [INFO] Aperture correction for CenA01 F410 3 arcsec: 1.4598117243251734 (based on 396 stars)
+2025-09-19 17:12:41,997 [INFO] Aperture correction for CenA01 F410 4 arcsec: 1.4598117243251734 (based on 396 stars)
+2025-09-19 17:12:41,997 [INFO] Aperture correction for CenA01 F410 5 arcsec: 1.4598117243251734 (based on 396 stars)
+2025-09-19 17:12:41,997 [INFO] Aperture correction for CenA01 F410 6 arcsec: 1.4598117243251734 (based on 396 stars)
+2025-09-19 17:12:42,036 [INFO]   Processing filter F430
+2025-09-19 17:13:58,238 [INFO] Background subtracted with box_size=50
+2025-09-19 17:13:58,245 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:15:14,252 [INFO] Background subtracted with box_size=50
+2025-09-19 17:15:14,262 [INFO] Aperture correction for CenA01 F430 3 arcsec: 1.4116407935363733 (based on 396 stars)
+2025-09-19 17:15:14,262 [INFO] Aperture correction for CenA01 F430 4 arcsec: 1.4116407935363733 (based on 396 stars)
+2025-09-19 17:15:14,262 [INFO] Aperture correction for CenA01 F430 5 arcsec: 1.4116407935363733 (based on 396 stars)
+2025-09-19 17:15:14,262 [INFO] Aperture correction for CenA01 F430 6 arcsec: 1.4116407935363733 (based on 396 stars)
+2025-09-19 17:15:14,302 [INFO]   Processing filter F515
+2025-09-19 17:16:31,566 [INFO] Background subtracted with box_size=50
+2025-09-19 17:16:31,573 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:17:49,041 [INFO] Background subtracted with box_size=50
+2025-09-19 17:17:49,051 [INFO] Aperture correction for CenA01 F515 3 arcsec: 1.317715206169189 (based on 396 stars)
+2025-09-19 17:17:49,051 [INFO] Aperture correction for CenA01 F515 4 arcsec: 1.317715206169189 (based on 396 stars)
+2025-09-19 17:17:49,051 [INFO] Aperture correction for CenA01 F515 5 arcsec: 1.317715206169189 (based on 396 stars)
+2025-09-19 17:17:49,051 [INFO] Aperture correction for CenA01 F515 6 arcsec: 1.317715206169189 (based on 396 stars)
+2025-09-19 17:17:49,091 [INFO]   Processing filter F660
+2025-09-19 17:19:42,818 [INFO] Saved background debug image for CenA01 F660
+2025-09-19 17:19:42,819 [INFO] Background subtracted with box_size=50
+2025-09-19 17:19:42,825 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:21:37,104 [INFO] Saved background debug image for CenA01 F660
+2025-09-19 17:21:37,104 [INFO] Background subtracted with box_size=50
+2025-09-19 17:21:37,114 [INFO] Aperture correction for CenA01 F660 3 arcsec: 1.2781405023581183 (based on 396 stars)
+2025-09-19 17:21:37,114 [INFO] Aperture correction for CenA01 F660 4 arcsec: 1.2781405023581183 (based on 396 stars)
+2025-09-19 17:21:37,114 [INFO] Aperture correction for CenA01 F660 5 arcsec: 1.2781405023581183 (based on 396 stars)
+2025-09-19 17:21:37,114 [INFO] Aperture correction for CenA01 F660 6 arcsec: 1.2781405023581183 (based on 396 stars)
+2025-09-19 17:21:53,588 [INFO] Saved debug aperture image for CenA01 F660
+2025-09-19 17:21:53,604 [INFO]   Processing filter F861
+2025-09-19 17:23:21,294 [INFO] Background subtracted with box_size=50
+2025-09-19 17:23:21,301 [INFO] Loaded 396 reference stars from CenA01_gaia_xp_matches.csv
+2025-09-19 17:24:49,865 [INFO] Background subtracted with box_size=50
+2025-09-19 17:24:49,876 [INFO] Aperture correction for CenA01 F861 3 arcsec: 1.278704994575652 (based on 396 stars)
+2025-09-19 17:24:49,876 [INFO] Aperture correction for CenA01 F861 4 arcsec: 1.278704994575652 (based on 396 stars)
+2025-09-19 17:24:49,876 [INFO] Aperture correction for CenA01 F861 5 arcsec: 1.278704994575652 (based on 396 stars)
+2025-09-19 17:24:49,876 [INFO] Aperture correction for CenA01 F861 6 arcsec: 1.278704994575652 (based on 396 stars)
+2025-09-19 17:24:49,957 [INFO] Saved results for CenA01 to CenA01_gc_photometry.csv
+2025-09-19 17:24:50,113 [INFO] Final merged results saved to all_fields_gc_photometry_merged.csv
+2025-09-19 17:24:50,113 [INFO] Total sources in original catalog: 3210
+2025-09-19 17:24:50,113 [INFO] Total sources with measurements: 181
+2025-09-19 17:24:50,115 [INFO] F378_3: 3169 valid, Mean SNR: 0.4, Mean Mag: 25.07
+2025-09-19 17:24:50,116 [INFO] F378_4: 3159 valid, Mean SNR: 0.4, Mean Mag: 24.84
+2025-09-19 17:24:50,117 [INFO] F378_5: 3162 valid, Mean SNR: 0.4, Mean Mag: 24.85
+2025-09-19 17:24:50,118 [INFO] F378_6: 3157 valid, Mean SNR: 0.5, Mean Mag: 24.82
+2025-09-19 17:24:50,119 [INFO] F395_3: 3166 valid, Mean SNR: 0.4, Mean Mag: 23.83
+2025-09-19 17:24:50,120 [INFO] F395_4: 3155 valid, Mean SNR: 0.5, Mean Mag: 23.63
+2025-09-19 17:24:50,121 [INFO] F395_5: 3145 valid, Mean SNR: 0.5, Mean Mag: 23.56
+2025-09-19 17:24:50,122 [INFO] F395_6: 3141 valid, Mean SNR: 0.6, Mean Mag: 23.65
+2025-09-19 17:24:50,123 [INFO] F410_3: 3171 valid, Mean SNR: 0.8, Mean Mag: 22.62
+2025-09-19 17:24:50,124 [INFO] F410_4: 3166 valid, Mean SNR: 0.9, Mean Mag: 22.53
+2025-09-19 17:24:50,125 [INFO] F410_5: 3158 valid, Mean SNR: 0.9, Mean Mag: 22.48
+2025-09-19 17:24:50,126 [INFO] F410_6: 3150 valid, Mean SNR: 1.0, Mean Mag: 22.46
+2025-09-19 17:24:50,127 [INFO] F430_3: 3178 valid, Mean SNR: 0.9, Mean Mag: 22.79
+2025-09-19 17:24:50,128 [INFO] F430_4: 3168 valid, Mean SNR: 1.0, Mean Mag: 22.71
+2025-09-19 17:24:50,129 [INFO] F430_5: 3160 valid, Mean SNR: 1.0, Mean Mag: 22.61
+2025-09-19 17:24:50,130 [INFO] F430_6: 3151 valid, Mean SNR: 1.1, Mean Mag: 22.64
+2025-09-19 17:24:50,131 [INFO] F515_3: 3182 valid, Mean SNR: 1.3, Mean Mag: 22.87
+2025-09-19 17:24:50,132 [INFO] F515_4: 3172 valid, Mean SNR: 1.4, Mean Mag: 22.80
+2025-09-19 17:24:50,133 [INFO] F515_5: 3165 valid, Mean SNR: 1.5, Mean Mag: 22.85
+2025-09-19 17:24:50,134 [INFO] F515_6: 3158 valid, Mean SNR: 1.5, Mean Mag: 23.03
+2025-09-19 17:24:50,135 [INFO] F660_3: 3180 valid, Mean SNR: 1.7, Mean Mag: 21.35
+2025-09-19 17:24:50,136 [INFO] F660_4: 3175 valid, Mean SNR: 1.8, Mean Mag: 21.28
+2025-09-19 17:24:50,137 [INFO] F660_5: 3165 valid, Mean SNR: 2.0, Mean Mag: 21.30
+2025-09-19 17:24:50,138 [INFO] F660_6: 3159 valid, Mean SNR: 2.1, Mean Mag: 21.26
+2025-09-19 17:24:50,139 [INFO] F861_3: 3182 valid, Mean SNR: 2.1, Mean Mag: 22.54
+2025-09-19 17:24:50,140 [INFO] F861_4: 3179 valid, Mean SNR: 2.2, Mean Mag: 22.45
+2025-09-19 17:24:50,141 [INFO] F861_5: 3171 valid, Mean SNR: 2.4, Mean Mag: 22.55
+2025-09-19 17:24:50,142 [INFO] F861_6: 3163 valid, Mean SNR: 2.5, Mean Mag: 22.58
+
 #+END_SRC
 
 
