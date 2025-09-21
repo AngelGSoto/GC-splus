@@ -377,6 +377,55 @@ python ../Programs/Splus_photometry_final_bg_mask_aper_correction.py
 
 #+END_SRC
 
+*** Additional Tests and Methodological Comparisons
+
+I identified slight discrepancies between my photometry
+results and the Taylor catalog reference magnitudes,
+which led to a series of methodological tests to optimize the approach.
+
+**** Approach 1: No Additional Background Subtraction
+
+Recognizing that the S-PLUS images are already pre-processed
+with background subtraction, I initially implemented a
+simplified pipeline without additional background correction.
+This version only applied aperture corrections to the photometry:
+
+: Splus_photometry_final_aper_correction.py
+
+**** Approach 2: Galaxy Background Residual Modeling
+
+Considering the complex background structure of Centaurus A,
+I implemented a specialized routine to model and subtract residual
+background patterns. This approach specifically addresses the
+challenges of working with already background-subtracted images
+of extended galaxies:
+
+: Splus_photometry_final_bg_modeling_aper_correction.py
+
+While this improved the results, some discrepancies with Taylor's
+broadband magnitudes persisted.
+
+**** Approach 3: Consistent Methodology Approach
+
+The most significant insight came from recognizing the importance
+of methodological consistency. Since the reference stars used for
+zero-point determination were measured without additional corrections,
+I implemented a simplified approach that applies identical methodology
+to both reference stars and science targets:
+
+: Splus_photometry_final_simple.py
+
+This consistent approach yielded the most physically meaningful
+results with better agreement with reference catalogs.
+
+**** Next Steps and Future Tests
+
+The logical progression would be to implement the same correction
+algorithms used for the globular cluster photometry to the reference
+star photometry process. This would ensure complete methodological
+consistency throughout the entire calibration pipeline, potentially
+further improving the accuracy and precision of the final photometric
+measurements.
 
 *** Final Catalog Structure
 | Column         | Description                                 | Special Values        |

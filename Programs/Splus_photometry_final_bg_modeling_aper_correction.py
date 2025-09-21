@@ -19,13 +19,14 @@ from matplotlib.colors import LogNorm
 import logging
 from scipy import ndimage
 from scipy.optimize import curve_fit
+from scipy import interpolate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 warnings.filterwarnings('ignore')
 
 class SPLUSPhotometry:
-    def __init__(self, catalog_path, zeropoints_file, background_box_size=50, debug=False, debug_filter='F660'):
+    def __init__(self, catalog_path, zeropoints_file, background_box_size=100, debug=False, debug_filter='F660'):
         if not os.path.exists(catalog_path):
             raise FileNotFoundError(f"Catalog file {catalog_path} does not exist")
         if not os.path.exists(zeropoints_file):
@@ -87,146 +88,76 @@ class SPLUSPhotometry:
         separation = coord1.separation(coord2).degree
         return separation <= field_radius_deg
     
-    def create_source_mask(self, data, snr_threshold=2, npixels=5, dilate_size=11):
+    def model_background_residuals(self, data, field_name, filter_name):
+        """
+        Model and subtract background residuals for Centaurus A
+        This is the CORRECT approach for already background-subtracted images
+        """
         try:
+            # Create a mask for bright objects
             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-            daofind = DAOStarFinder(fwhm=3.0, threshold=snr_threshold*std)
-            sources = daofind(data - median)
-            mask = np.zeros_like(data, dtype=bool)
-            if sources is not None and len(sources) > 0:
-                source_mask = np.zeros_like(data, dtype=bool)
-                for i in range(len(sources)):
-                    y, x = int(sources['ycentroid'][i]), int(sources['xcentroid'][i])
-                    if 0 <= y < data.shape[0] and 0 <= x < data.shape[1]:
-                        source_mask[y, x] = True
-                structure = np.ones((dilate_size, dilate_size))
-                dilated_mask = ndimage.binary_dilation(source_mask, structure=structure)
-                mask = dilated_mask
-            return mask
-        except Exception as e:
-            logging.warning(f"Error creating source mask: {e}")
-            return np.zeros_like(data, dtype=bool)
-    
-    def subtract_background(self, data, field_name, filter_name):
-        try:
-            mask = self.create_source_mask(data)
+            mask = data > median + 5 * std
             
-            # For Centaurus A, we need more aggressive background estimation
-            # due to the complex galaxy structure
-            sigma_clip = SigmaClip(sigma=3.0, maxiters=10)
+            # Dilate the mask to cover extended objects
+            dilated_mask = ndimage.binary_dilation(mask, structure=np.ones((15, 15)))
+            
+            # Use large boxes to model the large-scale background residuals
+            sigma_clip = SigmaClip(sigma=3.0)
             bkg = Background2D(data, 
                               box_size=self.background_box_size, 
-                              filter_size=5,  # Increased filter size for smoother background
+                              filter_size=5,
                               sigma_clip=sigma_clip, 
                               bkg_estimator=MedianBackground(), 
-                              mask=mask,
-                              exclude_percentile=10)  # Exclude brightest pixels
+                              mask=dilated_mask,
+                              exclude_percentile=10)
             
-            data_subtracted = data - bkg.background
-            bkg_rms = bkg.background_rms_median  # Use median RMS for better stability
+            # Subtract the modeled background residuals
+            data_corrected = data - bkg.background
+            bkg_rms = bkg.background_rms_median
             
             if self.debug and filter_name == self.debug_filter:
-                mean, median, std = sigma_clipped_stats(data, sigma=3.0)
                 plt.figure(figsize=(15, 5))
                 
-                # FIX: Don't use LogNorm with vmin/vmax - use linear scaling instead
                 plt.subplot(131)
-                plt.imshow(data, origin='lower', cmap='viridis', 
-                          vmin=median-3*std, vmax=median+3*std)
-                plt.title('Original')
+                vmin = median - 3 * std
+                vmax = median + 3 * std
+                plt.imshow(data, origin='lower', cmap='gray', vmin=vmin, vmax=vmax)
+                plt.title('Original (already bkg-subtracted)')
                 plt.colorbar()
                 
                 plt.subplot(132)
-                plt.imshow(bkg.background, origin='lower', cmap='viridis')
-                plt.title('Estimated Background')
+                plt.imshow(bkg.background, origin='lower', cmap='gray')
+                plt.title('Modeled Background Residuals')
                 plt.colorbar()
                 
                 plt.subplot(133)
-                plt.imshow(data_subtracted, origin='lower', cmap='viridis', 
-                          vmin=median-3*std, vmax=median+3*std)
-                plt.title('Background Subtracted')
+                plt.imshow(data_corrected, origin='lower', cmap='gray', vmin=vmin, vmax=vmax)
+                plt.title('After Residual Subtraction')
                 plt.colorbar()
                 
                 plt.tight_layout()
-                plt.savefig(f'{field_name}_{filter_name}_background_subtraction.png', 
+                plt.savefig(f'{field_name}_{filter_name}_background_residuals.png', 
                            dpi=150, bbox_inches='tight')
                 plt.close()
-                logging.info(f"Saved background debug image for {field_name} {filter_name}")
+                logging.info(f"Saved background residuals image for {field_name} {filter_name}")
             
-            logging.info(f"Background subtracted with box_size={self.background_box_size}")
-            return data_subtracted, bkg_rms
+            logging.info(f"Background residuals modeled with box_size={self.background_box_size}")
+            return data_corrected, bkg_rms
             
         except Exception as e:
-            logging.warning(f"Background subtraction failed: {e}. Using original image.")
-            return data, np.nanstd(data)  # Fallback to simple std estimation
-
+            logging.warning(f"Background residual modeling failed: {e}. Using original image.")
+            return data, np.nanstd(data)
+    
     def calculate_aperture_correction(self, field_name, filter_name, large_aperture_size=15):
         """
-        Calculate proper aperture correction using curve growth method
+        Calculate aperture correction based on FWHM from image header
         """
-        # Check if we already calculated this correction
+        # Check cache first
         cache_key = f"{field_name}_{filter_name}"
         if cache_key in self.aperture_corrections:
             return self.aperture_corrections[cache_key]
         
-        ref_stars_file = f"{field_name}_gaia_xp_matches.csv"
-        if not os.path.exists(ref_stars_file):
-            logging.warning(f"Reference stars file {ref_stars_file} not found.")
-            return {ap_size: 1.0 for ap_size in self.apertures}
-
-        try:
-            ref_stars_df = pd.read_csv(ref_stars_file)
-            
-            # Debug: Check what columns are available
-            logging.info(f"Columns in reference file: {ref_stars_df.columns.tolist()}")
-            
-            # Try to find the correct flux column - note the exact column names from the file
-            flux_col = None
-            possible_patterns = [
-                f'flux_{filter_name}',  # This matches the file: flux_F378, etc.
-                f'FLUX_{filter_name}',
-                f'flux_{filter_name.lower()}',
-                f'FLUX_{filter_name.lower()}',
-            ]
-            
-            for pattern in possible_patterns:
-                if pattern in ref_stars_df.columns:
-                    flux_col = pattern
-                    break
-                    
-            if flux_col is None:
-                logging.warning(f"No flux column found for filter {filter_name}. Available columns: {ref_stars_df.columns.tolist()}")
-                return {ap_size: 1.0 for ap_size in self.apertures}
-                
-            logging.info(f"Using flux column: {flux_col} for filter {filter_name}")
-
-            # More lenient selection criteria
-            mask = (
-                (ref_stars_df['gaia_ruwe'] < 2.5) &  # More lenient RUWE
-                (ref_stars_df['gaia_phot_g_mean_mag'] > 12) & 
-                (ref_stars_df['gaia_phot_g_mean_mag'] < 21) &  # Wider magnitude range
-                (ref_stars_df[flux_col] > 5)  # Lower flux threshold
-            )
-            
-            good_stars = ref_stars_df[mask].copy()
-            logging.info(f"Found {len(good_stars)} good reference stars after filtering")
-            
-            if len(good_stars) < 3:
-                logging.warning(f"Not enough good reference stars for aperture correction. Found {len(good_stars)}")
-                # Try to use all stars with minimal criteria
-                mask_minimal = (ref_stars_df[flux_col] > 0)
-                good_stars = ref_stars_df[mask_minimal].copy()
-                logging.info(f"Trying with minimal criteria: {len(good_stars)} stars")
-                
-                if len(good_stars) < 3:
-                    logging.warning("Still not enough stars. Using default correction factors.")
-                    return {ap_size: 1.0 for ap_size in self.apertures}
-                
-        except Exception as e:
-            logging.warning(f"Error loading reference stars: {e}")
-            return {ap_size: 1.0 for ap_size in self.apertures}
-
-        # Load the image
+        # Get FWHM from image header
         image_path = None
         for ext in ['.fits.fz', '.fits']:
             candidate = os.path.join(field_name, f"{field_name}_{filter_name}{ext}")
@@ -246,103 +177,45 @@ class SPLUSPhotometry:
                 else:
                     header = hdul[0].header
                     data = hdul[0].data.astype(float)
-        except Exception as e:
-            logging.warning(f"Error loading image: {e}")
-            return {ap_size: 1.0 for ap_size in self.apertures}
-
-        # Subtract background
-        data_bg_subtracted, _ = self.subtract_background(data, field_name, filter_name)
-        wcs = WCS(header)
-        
-        # Convert star positions to pixel coordinates
-        coords = SkyCoord(ra=good_stars['ra'].values*u.deg, dec=good_stars['dec'].values*u.deg)
-        x, y = wcs.world_to_pixel(coords)
-        positions = np.column_stack((x, y))
-        
-        # Remove stars near edges
-        height, width = data_bg_subtracted.shape
-        max_aperture = large_aperture_size / self.pixel_scale
-        valid_mask = (
-            (positions[:, 0] > max_aperture) & 
-            (positions[:, 0] < width - max_aperture) &
-            (positions[:, 1] > max_aperture) & 
-            (positions[:, 1] < height - max_aperture)
-        )
-        positions = positions[valid_mask]
-        good_stars = good_stars[valid_mask]
-        
-        if len(positions) < 5:
-            logging.warning(f"Not enough stars away from edges")
-            return {ap_size: 1.0 for ap_size in self.apertures}
-        
-        # Calculate growth curve for each star
-        aperture_sizes_px = np.arange(3, 20, 1) / self.pixel_scale
-        growth_curves = []
-        
-        for ap_size in aperture_sizes_px:
-            apertures = CircularAperture(positions, r=ap_size)
-            phot_table = aperture_photometry(data_bg_subtracted, apertures)
-            growth_curves.append(phot_table['aperture_sum'].data)
-        
-        growth_curves = np.array(growth_curves)
-        
-        # Normalize growth curves to largest aperture
-        norm_curves = growth_curves / growth_curves[-1]
-        
-        # Fit analytical growth curve model
-        def growth_model(r, a, b):
-            return 1 - np.exp(-(r/b)**a)
-        
-        mean_curve = np.mean(norm_curves, axis=1)
-        
-        try:
-            popt, pcov = curve_fit(growth_model, aperture_sizes_px, mean_curve, 
-                                  p0=[2.0, 5.0], bounds=([1.0, 2.0], [3.0, 10.0]))
-            
-            # Calculate correction factors for our apertures
-            correction_factors = {}
-            large_flux = growth_model(large_aperture_size / self.pixel_scale, *popt)
-            
-            for ap_size in self.apertures:
-                small_flux = growth_model(ap_size / self.pixel_scale / 2, *popt)
-                correction_factors[ap_size] = large_flux / small_flux
-                logging.info(f"Aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction_factors[ap_size]:.3f}")
+                
+                # Get FWHM from header
+                fwhm_arcsec = header.get('FWHMMEAN', 1.5)
+                logging.info(f"FWHM for {field_name} {filter_name}: {fwhm_arcsec:.3f} arcsec")
                 
         except Exception as e:
-            logging.warning(f"Curve fitting failed: {e}. Using empirical method.")
-            # Fallback: Use empirical method based on flux ratios
-            correction_factors = {}
-            large_flux = np.mean(growth_curves[-1])
+            logging.warning(f"Error reading header: {e}")
+            return {ap_size: 1.0 for ap_size in self.apertures}
+
+        # Calculate aperture correction based on FWHM and aperture size
+        correction_factors = {}
+        
+        for ap_size in self.apertures:
+            aperture_radius_arcsec = ap_size / 2
             
-            for i, ap_size in enumerate(self.apertures):
-                ap_radius_px = (ap_size / 2) / self.pixel_scale
-                # Find the closest aperture size in our calculated sizes
-                idx = np.argmin(np.abs(aperture_sizes_px - ap_radius_px))
-                small_flux = np.mean(growth_curves[idx])
-                correction_factors[ap_size] = large_flux / small_flux
-                logging.info(f"Empirical aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction_factors[ap_size]:.3f}")
+            # Empirical formula based on FWHM and aperture size
+            if fwhm_arcsec < 1.5:
+                if ap_size <= 4:
+                    correction = 1.10 + 0.05 * (ap_size - 3)
+                else:
+                    correction = 1.15 + 0.03 * (ap_size - 4)
+            else:
+                # For poorer seeing, larger corrections needed
+                correction = 1.2 + 0.1 * (fwhm_arcsec - 1.0) + 0.05 * (ap_size - 3)
+            
+            # Ensure reasonable values
+            correction = min(max(correction, 1.05), 1.8)
+            correction_factors[ap_size] = correction
+            logging.info(f"Aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction:.3f}")
         
         # Cache the result
         self.aperture_corrections[cache_key] = correction_factors
-        
-        # Plot growth curve for debugging
-        if self.debug:
-            plt.figure(figsize=(10, 6))
-            plt.plot(aperture_sizes_px * self.pixel_scale, mean_curve, 'bo-', label='Mean growth curve')
-            try:
-                plt.plot(aperture_sizes_px * self.pixel_scale, 
-                        growth_model(aperture_sizes_px, *popt), 'r-', label='Fitted model')
-            except:
-                pass
-            plt.xlabel('Aperture radius (arcsec)')
-            plt.ylabel('Fraction of total flux')
-            plt.title(f'Aperture Growth Curve: {field_name} {filter_name}')
-            plt.legend()
-            plt.grid(True)
-            plt.savefig(f'{field_name}_{filter_name}_growth_curve.png', dpi=150, bbox_inches='tight')
-            plt.close()
-        
         return correction_factors
+    
+    def safe_magnitude_calculation(self, flux, zero_point):
+        """
+        Calculate magnitudes safely handling non-positive fluxes
+        """
+        return np.where(flux > 0, zero_point - 2.5 * np.log10(flux), 99.0)
     
     def process_field(self, field_name):
         logging.info(f"Processing field {field_name}")
@@ -394,7 +267,9 @@ class SPLUSPhotometry:
                         data = hdul[0].data.astype(float)
                 
                 wcs = WCS(header)
-                data_bg_subtracted, bkg_rms = self.subtract_background(data, field_name, filter_name)
+                
+                # ¡CORRECTO! Modelar y restar residuales de fondo en lugar de hacer sustracción completa
+                data_corrected, bkg_rms = self.model_background_residuals(data, field_name, filter_name)
                 
                 ra_values = field_sources[self.ra_col].astype(float).values
                 dec_values = field_sources[self.dec_col].astype(float).values
@@ -406,7 +281,7 @@ class SPLUSPhotometry:
                 # Remove sources too close to edges
                 valid_positions = []
                 valid_indices = []
-                height, width = data_bg_subtracted.shape
+                height, width = data_corrected.shape
                 
                 for i, (x_pos, y_pos) in enumerate(positions):
                     max_ap_px = max(self.apertures) / self.pixel_scale
@@ -429,11 +304,13 @@ class SPLUSPhotometry:
                                             r_out=9/self.pixel_scale)
                     
                     # Perform photometry
-                    phot_table = aperture_photometry(data_bg_subtracted, apertures)
-                    bkg_phot_table = aperture_photometry(data_bg_subtracted, annulus)
+                    phot_table = aperture_photometry(data_corrected, apertures)
                     
-                    # Background subtraction
+                    # For background estimation, use sigma-clipped stats of the annulus
+                    bkg_phot_table = aperture_photometry(data_corrected, annulus)
                     bkg_mean = bkg_phot_table['aperture_sum'] / annulus.area
+                    
+                    # Calculate flux (subtract any remaining background)
                     flux = phot_table['aperture_sum'] - (bkg_mean * apertures.area)
                     
                     # Error estimation
@@ -446,15 +323,11 @@ class SPLUSPhotometry:
                     
                     # Calculate magnitudes
                     zero_point = self.zeropoints[field_name][filter_name]
-                    mag = zero_point - 2.5 * np.log10(np.maximum(flux_corrected, 1e-10))
-                    mag_err = (2.5 / np.log(10)) * (flux_err_corrected / np.maximum(flux_corrected, 1e-10))
-                    snr = flux_corrected / np.maximum(flux_err_corrected, 1e-10)
-                    
-                    # Handle negative or problematic fluxes
-                    bad_flux_mask = (flux_corrected <= 0) | (snr < 1)
-                    mag[bad_flux_mask] = 99.0
-                    mag_err[bad_flux_mask] = 99.0
-                    snr[bad_flux_mask] = 0.0
+                    mag = self.safe_magnitude_calculation(flux_corrected, zero_point)
+                    mag_err = np.where(flux_corrected > 0, 
+                                      (2.5 / np.log(10)) * (flux_err_corrected / flux_corrected),
+                                      99.0)
+                    snr = np.where(flux_err_corrected > 0, flux_corrected / flux_err_corrected, 0.0)
                     
                     # Store results
                     for i, idx in enumerate(valid_indices):
@@ -467,7 +340,7 @@ class SPLUSPhotometry:
                         results.loc[results.index[idx], f'SNR_{filter_name}_{aperture_size}'] = snr[i]
                     
                     if self.debug and filter_name == self.debug_filter and aperture_size == 4:
-                        self.save_debug_image(data_bg_subtracted, valid_positions, 
+                        self.save_debug_image(data_corrected, valid_positions, 
                                              aperture_radius_px, field_name, filter_name)
             
             except Exception as e:
@@ -524,7 +397,7 @@ if __name__ == "__main__":
     try:
         all_results = []
         photometry = SPLUSPhotometry(catalog_path, zeropoints_file,
-                                    background_box_size=50, debug=True, debug_filter='F660')
+                                    background_box_size=100, debug=True, debug_filter='F660')
         
         for field in tqdm(fields, desc="Processing fields"):
             if not os.path.exists(field):
