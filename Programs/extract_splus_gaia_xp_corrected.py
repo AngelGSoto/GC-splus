@@ -214,9 +214,10 @@ def extract_stars_corrected(image_path, reference_positions=None, threshold_sigm
         
         # Coordenadas astronómicas si hay WCS
         if has_wcs:
-            coords = wcs.pixel_to_world(sources['xcentroid'], sources['ycentroid'])
-            sources['ra'] = coords.ra.deg
-            sources['dec'] = coords.dec.deg
+            # Usar all_pix2world para mayor compatibilidad
+            ra, dec = wcs.all_pix2world(sources['xcentroid'], sources['ycentroid'], 0)
+            sources['ra'] = ra
+            sources['dec'] = dec
         else:
             sources['ra'] = np.nan
             sources['dec'] = np.nan
@@ -253,16 +254,29 @@ def get_reference_positions_from_catalog(catalog_path, image_path):
             
             wcs = WCS(header)
         
-        # Convertir coordenadas a píxeles
-        coords = SkyCoord(ra=ref_catalog['ra'].values*u.deg, 
-                         dec=ref_catalog['dec'].values*u.deg)
-        x, y = wcs.world_to_pixel(coords)
+        # Convertir coordenadas a píxeles - FORMA CORREGIDA
+        # Usar all_world2pix en lugar de world_to_pixel para mayor compatibilidad
+        ra_deg = ref_catalog['ra'].values
+        dec_deg = ref_catalog['dec'].values
+        
+        # Convertir a píxeles usando el método tradicional
+        x, y = wcs.all_world2pix(ra_deg, dec_deg, 0)
         
         # Filtrar posiciones válidas
-        valid_mask = np.isfinite(x) & np.isfinite(y)
+        valid_mask = np.isfinite(x) & np.isfinite(y) & (x >= 0) & (y >= 0)
+        
+        # Verificar dimensiones de la imagen
+        with fits.open(image_path) as hdul:
+            for hdu in hdul:
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    data_shape = hdu.data.shape
+                    break
+        
+        valid_mask = valid_mask & (x < data_shape[1]) & (y < data_shape[0])
+        
         positions = np.column_stack((x[valid_mask], y[valid_mask]))
         
-        logging.info(f"Found {len(positions)} valid reference positions")
+        logging.info(f"Found {len(positions)} valid reference positions out of {len(ref_catalog)}")
         return positions, ref_catalog[valid_mask].copy()
         
     except Exception as e:
@@ -285,10 +299,20 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
     # Archivos de entrada y salida
     input_catalog = f'{field_name}_gaia_xp_matches.csv'
     output_catalog = f'{field_name}_gaia_xp_matches_corrected.csv'
-    spectra_dir = f'gaia_spectra_{field_name}'
     
+    # Verificar que el catálogo de entrada existe y tiene las columnas necesarias
     if not os.path.exists(input_catalog):
         logging.error(f"Input catalog not found: {input_catalog}")
+        return False
+    
+    try:
+        ref_test = pd.read_csv(input_catalog)
+        if 'ra' not in ref_test.columns or 'dec' not in ref_test.columns:
+            logging.error(f"Input catalog {input_catalog} missing 'ra' or 'dec' columns")
+            return False
+        logging.info(f"Input catalog has {len(ref_test)} stars with ra/dec coordinates")
+    except Exception as e:
+        logging.error(f"Error reading input catalog: {e}")
         return False
     
     # Procesar cada filtro
@@ -335,6 +359,13 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
     combined_catalog = ref_catalog.copy()
     
     for band, cat in band_catalogs.items():
+        # Asegurarse de que los índices coincidan
+        if len(cat) != len(combined_catalog):
+            logging.warning(f"Band {band} has {len(cat)} stars but reference has {len(combined_catalog)}. Truncating.")
+            min_len = min(len(cat), len(combined_catalog))
+            cat = cat.iloc[:min_len]
+            combined_catalog = combined_catalog.iloc[:min_len]
+        
         # Añadir columnas de este filtro
         combined_catalog[f'mag_inst_{band}'] = cat['mag_inst'].values
         combined_catalog[f'flux_adu_{band}'] = cat['flux_adu'].values
@@ -345,10 +376,10 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
         
         # Información instrumental (solo una vez por banda)
         if f'fwhm_{band}' not in combined_catalog.columns:
-            combined_catalog[f'fwhm_{band}'] = cat['fwhm'].values[0]
-            combined_catalog[f'pixscale_{band}'] = cat['pixscale'].values[0]
-            combined_catalog[f'gain_{band}'] = cat['gain'].values[0]
-            combined_catalog[f'rdnoise_{band}'] = cat['rdnoise'].values[0]
+            combined_catalog[f'fwhm_{band}'] = cat['fwhm'].values[0] if len(cat) > 0 else np.nan
+            combined_catalog[f'pixscale_{band}'] = cat['pixscale'].values[0] if len(cat) > 0 else np.nan
+            combined_catalog[f'gain_{band}'] = cat['gain'].values[0] if len(cat) > 0 else np.nan
+            combined_catalog[f'rdnoise_{band}'] = cat['rdnoise'].values[0] if len(cat) > 0 else np.nan
     
     # Guardar resultados
     combined_catalog.to_csv(output_catalog, index=False)
@@ -360,9 +391,12 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
         mag_col = f'mag_inst_{band}'
         if mag_col in combined_catalog.columns:
             valid_mags = combined_catalog[mag_col][combined_catalog[mag_col] < 50]
-            mean_mag = valid_mags.mean()
-            std_mag = valid_mags.std()
-            logging.info(f"{band}: Mean mag = {mean_mag:.2f} ± {std_mag:.2f} (n={len(valid_mags)})")
+            if len(valid_mags) > 0:
+                mean_mag = valid_mags.mean()
+                std_mag = valid_mags.std()
+                logging.info(f"{band}: Mean mag = {mean_mag:.2f} ± {std_mag:.2f} (n={len(valid_mags)})")
+            else:
+                logging.info(f"{band}: No valid magnitudes")
     
     return True
 
