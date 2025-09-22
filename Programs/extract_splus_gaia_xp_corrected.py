@@ -11,6 +11,8 @@ import pandas as pd
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.stats import mad_std, sigma_clipped_stats, SigmaClip
+from astropy.coordinates import SkyCoord
+from astropy.units import u
 from photutils.detection import DAOStarFinder
 from photutils.aperture import CircularAperture, CircularAnnulus, aperture_photometry
 from photutils.background import Background2D, MedianBackground
