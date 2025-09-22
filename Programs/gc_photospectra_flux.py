@@ -16,29 +16,27 @@ from pathlib import Path
 wl = [3485, 3785, 3950, 4100, 4300, 4803, 5150, 6250, 6600, 7660, 8610, 9110]
 filter_names = ['U', 'F378', 'F395', 'F410', 'F430', 'G', 'F515', 'R', 'F660', 'I', 'F861', 'Z']
 
-# Colors and markers: DIFFERENT for Taylor vs SPLUS filters
+# Colors and markers: MISMO COLOR Y SÍMBOLO PARA TAYLOR, MISMO COLOR Y SÍMBOLO PARA T80S
 # Taylor filters (broad-band): U, G, R, I, Z
 taylor_filters = ['U', 'G', 'R', 'I', 'Z']
-taylor_colors = ["#1f77b4", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]  # Blue, Green, Red, Purple, Brown
-taylor_markers = ["s", "D", "o", "^", "v"]  # Square, Diamond, Circle, Triangle up, Triangle down
+taylor_color = "#1f77b4"  # AZUL para todos los filtros Taylor
+taylor_marker = "s"       # CUADRADO para todos los filtros Taylor
 
 # SPLUS filters (narrow-band): all others
 splus_filters = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
-splus_colors = ["#ff7f0e", "#ffbb78", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf", "#9edae5"]  # Orange, Light orange, Pink, Gray, Olive, Cyan, Light cyan
-splus_markers = ["*", "P", "X", "h", "p", "H", "d"]  # Star, Plus, X, Hexagon, Pentagon, Hexagon2, Diamond
+splus_color = "#ff7f0e"   # NARANJA para todos los filtros SPLUS
+splus_marker = "o"        # CÍRCULO para todos los filtros SPLUS
 
-# Create mapping dictionaries
+# Create mapping dictionaries - MISMO COLOR Y SÍMBOLO PARA CADA TIPO
 color_map = {}
 marker_map = {}
-for i, filter_name in enumerate(filter_names):
+for filter_name in filter_names:
     if filter_name in taylor_filters:
-        idx = taylor_filters.index(filter_name)
-        color_map[filter_name] = taylor_colors[idx]
-        marker_map[filter_name] = taylor_markers[idx]
+        color_map[filter_name] = taylor_color
+        marker_map[filter_name] = taylor_marker
     else:
-        idx = splus_filters.index(filter_name)
-        color_map[filter_name] = splus_colors[idx]
-        marker_map[filter_name] = splus_markers[idx]
+        color_map[filter_name] = splus_color
+        marker_map[filter_name] = splus_marker
 
 def safe_convert(value, default=np.nan):
     """Safely convert a value to float, handling masked and string values."""
@@ -282,7 +280,7 @@ for source in data:
         if np.isnan(f) or s < args.min_snr:
             continue
         
-        # Get color and marker based on filter type
+        # Get color and marker based on filter type - AHORA MISMO COLOR POR TIPO
         color = color_map[filter_name]
         marker = marker_map[filter_name]
         
