@@ -433,6 +433,17 @@ I modified the script that estimate de instrumenta magnitudes of the reference s
 
 : extract_splus_gaia_xp_corrected.py
 
+Now we have zeroPoints and magnitudes corredted. The results aare very nice. Now my magnitudes are coherent
+we magnitude of Taylor.
+The final resulst are in?
+
+#+BEGIN_SRC sh
+Results$ ls
+all_fields_gc_photometry_merged.csv                average_zero_points_detailed_corrected.csv
+all_fields_zero_points_detailed_corrected.csv      average_zero_points_splus_format_corrected.csv
+all_fields_zero_points_splus_format_corrected.csv
+#+END_SRC
+
 *** Final Catalog Structure
 | Column         | Description                                 | Special Values        |
 |-----------------+---------------------------------------------+---------------------------|
