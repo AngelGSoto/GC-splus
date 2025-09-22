@@ -373,7 +373,7 @@ class SPLUSPhotometry:
 # ---- Main Execution ----
 if __name__ == "__main__":
     catalog_path = '../TAP_1_J_MNRAS_3444_gc.csv'
-    zeropoints_file = 'all_fields_zero_points_splus_format_corrected.csv'
+    zeropoints_file = 'Results/all_fields_zero_points_splus_format_corrected.csv'
     
     if not os.path.exists(catalog_path):
         logging.error(f"Catalog file {catalog_path} not found")
@@ -443,7 +443,7 @@ if __name__ == "__main__":
                     merged_catalog.drop(col, axis=1, inplace=True)
             
             # Save final catalog
-            output_file = 'all_fields_gc_photometry_merged.csv'
+            output_file = 'Results/all_fields_gc_photometry_merged.csv'
             merged_catalog.to_csv(output_file, index=False, float_format='%.6f')
             logging.info(f"Final merged results saved to {output_file}")
             
