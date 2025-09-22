@@ -30,6 +30,8 @@ output/
 results/
 tmp/
 temp/
+photospectra/
+photospectra_corrected/
 
 # Ignorar archivos CSV y TSV si no deseas compartirlos
 *.csv

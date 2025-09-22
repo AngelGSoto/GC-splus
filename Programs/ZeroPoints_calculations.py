@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 # Find all CSV files
-csv_files = glob.glob("CenA*_gaia_xp_matches.csv")
+csv_files = glob.glob("CenA*_gaia_xp_matches_corrected.csv")
 
 # Process each field
 all_detailed_results = []
@@ -28,8 +28,8 @@ for csv_file in csv_files:
         print(f"Successfully processed {csv_file}")
         
         # Read the detailed results file
-        field_name = csv_file.split('_gaia_xp_matches.csv')[0]
-        detailed_file = f'{field_name}_zero_points.csv'
+        field_name = csv_file.split('_gaia_xp_matches_corrected.csv')[0]
+        detailed_file = f'{field_name}_zero_points_corrected.csv'
         
         try:
             # Read detailed results
@@ -45,9 +45,9 @@ for csv_file in csv_files:
             # Add zero points for each filter
             for _, row in df_detailed.iterrows():
                 filter_name = row['Filter']
-                if filter_name.startswith('mag_'):
+                if filter_name.startswith('mag_inst_'):
                     # Convert to SPLUS column name (e.g., mag_F378 -> F378)
-                    splus_col = filter_name.replace('mag_', '')
+                    splus_col = filter_name.replace('mag_inst_', '')
                     splus_row[splus_col] = row['Median_ZP']
             
             all_splus_results.append(splus_row)
@@ -60,8 +60,8 @@ for csv_file in csv_files:
 # Save detailed results (original format)
 if all_detailed_results:
     combined_detailed = pd.concat(all_detailed_results, ignore_index=True)
-    combined_detailed.to_csv('all_fields_zero_points_detailed.csv', index=False)
-    print("Detailed results saved to all_fields_zero_points_detailed.csv")
+    combined_detailed.to_csv('all_fields_zero_points_detailed_corrected.csv', index=False)
+    print("Detailed results saved to all_fields_zero_points_detailed_corrected.csv")
     
     # Calculate average zero points across all fields
     avg_zp = combined_detailed.groupby('Filter').agg({
@@ -75,8 +75,8 @@ if all_detailed_results:
         'STD_MAD': 'Average_STD_MAD'
     }, inplace=True)
     
-    avg_zp.to_csv('average_zero_points_detailed.csv', index=False)
-    print("Average zero points saved to average_zero_points_detailed.csv")
+    avg_zp.to_csv('average_zero_points_detailed_corrected.csv', index=False)
+    print("Average zero points saved to average_zero_points_detailed_corrected.csv")
 
 # Save SPLUS format results (sin RA y DEC)
 if all_splus_results:
@@ -94,8 +94,8 @@ if all_splus_results:
     splus_df = splus_df[column_order]
     
     # Save with appropriate precision
-    splus_df.to_csv('all_fields_zero_points_splus_format.csv', index=False, float_format='%.6f')
-    print("SPLUS format results saved to all_fields_zero_points_splus_format.csv")
+    splus_df.to_csv('all_fields_zero_points_splus_format_corrected.csv', index=False, float_format='%.6f')
+    print("SPLUS format results saved to all_fields_zero_points_splus_format_corrected.csv")
     
     # Calculate averages for SPLUS format
     filter_cols = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
@@ -108,8 +108,8 @@ if all_splus_results:
         'STD_ZP': std_splus.values
     })
     
-    avg_splus_df.to_csv('average_zero_points_splus_format.csv', index=False, float_format='%.6f')
-    print("Average SPLUS format zero points saved to average_zero_points_splus_format.csv")
+    avg_splus_df.to_csv('average_zero_points_splus_format_corrected.csv', index=False, float_format='%.6f')
+    print("Average SPLUS format zero points saved to average_zero_points_splus_format_corrected.csv")
     
     # Print summary
     print("\n=== SPLUS FORMAT SUMMARY ===")

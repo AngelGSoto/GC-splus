@@ -41,7 +41,7 @@ parser.add_argument("--aper", type=int, default=5, choices=[3, 4, 5, 6],
 parser.add_argument("--id", type=str, help="Specific GC ID to plot (e.g., 'T17-2421')")
 parser.add_argument("--min-snr", type=float, default=0.1,  # Reduced from 3.0 to 0.1
                     help="Minimum SNR for plotting filters")
-parser.add_argument("--output-dir", type=str, default="./photospectra",
+parser.add_argument("--output-dir", type=str, default="./photospectra_corrected",
                     help="Output directory for plots")
 parser.add_argument("--debug", action="store_true",
                     help="Enable debug output")
