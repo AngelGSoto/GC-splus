@@ -373,7 +373,7 @@ class SPLUSPhotometry:
 # ---- Main Execution ----
 if __name__ == "__main__":
     catalog_path = '../TAP_1_J_MNRAS_3444_gc.csv'
-    zeropoints_file = 'all_fields_zero_points_splus_format.csv'
+    zeropoints_file = 'all_fields_zero_points_splus_format_corrected.csv'
     
     if not os.path.exists(catalog_path):
         logging.error(f"Catalog file {catalog_path} not found")

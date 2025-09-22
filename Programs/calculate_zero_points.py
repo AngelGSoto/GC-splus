@@ -13,13 +13,13 @@ from astropy.stats import sigma_clipped_stats
 
 # Filter mapping between CSV columns and JSON keys
 filter_mapping = {
-    'mag_F378': 'F0378',
-    'mag_F395': 'F0395', 
-    'mag_F410': 'F0410',
-    'mag_F430': 'F0430',
-    'mag_F515': 'F0515',
-    'mag_F660': 'F0660',
-    'mag_F861': 'F0861'
+    'mag_inst_F378': 'F0378',
+    'mag_inst_F395': 'F0395', 
+    'mag_inst_F410': 'F0410',
+    'mag_inst_F430': 'F0430',
+    'mag_inst_F515': 'F0515',
+    'mag_inst_F660': 'F0660',
+    'mag_inst_F861': 'F0861'
 }
 
 def calculate_zero_points(csv_file, json_dir):
@@ -35,7 +35,7 @@ def calculate_zero_points(csv_file, json_dir):
     pho_inst = pd.read_csv(csv_file)
     
     # Extract field name from CSV filename
-    field_name = os.path.basename(csv_file).split('_gaia_xp_matches.csv')[0]
+    field_name = os.path.basename(csv_file).split('_gaia_xp_matches_corrected.csv')[0]
     
     # Get the directory where JSON files are stored
     json_files_dir = os.path.join(json_dir, f"gaia_spectra_{field_name}")
@@ -146,7 +146,7 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     # Plot 1: Individual measurements and median values
     for i, (filt, data) in enumerate(zero_points_data.items()):
         if data is not None:
-            filter_short = filt.replace('mag_', '')
+            filter_short = filt.replace('mag_inst_', '')
             filters.append(filter_short)
             zp_medians.append(data['median'])
             zp_errors_mad.append(data['std_mad'])
@@ -188,7 +188,7 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     plt.tight_layout()
     
     # Save plot
-    plt.savefig(f'{field_name}_zero_points.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{field_name}_zero_points_corrected.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 def main():
@@ -210,8 +210,8 @@ def main():
     zp_results, all_zp_values = calculate_zero_points(args.CSV, args.json_dir)
     
     # Save results to file
-    field_name = os.path.basename(args.CSV).split('_gaia_xp_matches.csv')[0]
-    output_file = f'{field_name}_zero_points.csv'
+    field_name = os.path.basename(args.CSV).split('_gaia_xp_matches_corrected.csv')[0]
+    output_file = f'{field_name}_zero_points_corrected.csv'
     
     with open(output_file, 'w') as f:
         f.write("Filter,Median_ZP,MAD,STD_MAD,Mean_ZP,STD,Mean_Clipped,Median_Clipped,STD_Clipped,N_Stars,Min,Max,Q25,Q75\n")
@@ -230,7 +230,7 @@ def main():
     # Create plot if requested
     if args.plot and any(data is not None for data in zp_results.values()):
         plot_zero_points(zp_results, field_name, all_zp_values)
-        print(f"Plot saved as {field_name}_zero_points.png")
+        print(f"Plot saved as {field_name}_zero_points_corrected.png")
     elif args.plot:
         print("No data available for plotting")
 
