@@ -211,7 +211,7 @@ def calculate_zero_points(csv_file, json_dir):
 
 def plot_zero_points(zero_points_data, field_name, all_zp_values):
     """
-    Plot zero point distributions with median values
+    Plot zero point distributions with boxplots for better clarity
     """
     if not zero_points_data or all(v is None for v in zero_points_data.values()):
         logging.warning("No data available for plotting")
@@ -222,79 +222,63 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     filters = []
     zp_medians = []
     zp_errors_mad = []
-    zp_means = []
-    zp_errors_std = []
     n_measurements = []
     
-    colors = plt.cm.viridis(np.linspace(0, 1, len(zero_points_data)))
+    # Preparar datos para boxplot
+    boxplot_data = []
+    boxplot_labels = []
     
-    # Plot 1: Individual measurements and median values
     for i, (filt, data) in enumerate(zero_points_data.items()):
         if data is not None and len(all_zp_values[filt]) > 0:
             filter_short = filt.replace('mag_inst_', '')
             filters.append(filter_short)
             zp_medians.append(data['median'])
             zp_errors_mad.append(data['std_mad'])
-            zp_means.append(data['mean'])
-            zp_errors_std.append(data['std'])
             n_measurements.append(data['n_stars'])
             
-            # Plot individual measurements with jitter to avoid overplotting
-            x_pos = i + np.random.normal(0, 0.05, len(all_zp_values[filt]))
-            ax1.scatter(x_pos, all_zp_values[filt], 
-                       alpha=0.4, color=colors[i], s=20, 
-                       label=f'{filter_short} (n={data["n_stars"]})')
+            boxplot_data.append(all_zp_values[filt])
+            boxplot_labels.append(filter_short)
     
-    if not filters:  # No valid data to plot
+    if not filters:
         plt.close(fig)
         return
     
-    # Plot median values with MAD error bars
-    ax1.errorbar(range(len(filters)), zp_medians, yerr=zp_errors_mad, 
-                fmt='o', color='red', markersize=10, capsize=8, 
-                label='Median ± MAD', linewidth=3, alpha=0.8)
+    # Gráfico 1: Boxplot (MUCHO más claro)
+    bp = ax1.boxplot(boxplot_data, labels=boxplot_labels, patch_artist=True,
+                    boxprops=dict(facecolor='lightblue', alpha=0.7),
+                    medianprops=dict(color='red', linewidth=2),
+                    whiskerprops=dict(color='black', linewidth=1),
+                    capprops=dict(color='black', linewidth=1))
     
-    ax1.set_xticks(range(len(filters)))
-    ax1.set_xticklabels(filters, rotation=45, ha='right')
+    # Añadir puntos individuales con jitter mínimo
+    for i, data in enumerate(boxplot_data):
+        x_jitter = np.random.normal(i + 1, 0.05, len(data))  # Jitter muy pequeño
+        ax1.scatter(x_jitter, data, alpha=0.4, color='blue', s=20, zorder=3)
+    
     ax1.set_ylabel('Zero Point (synthetic - instrumental)')
-    ax1.set_title(f'Zero Points for Field {field_name} - Corrected Photometry')
+    ax1.set_title(f'Zero Points for Field {field_name} - Boxplot with Individual Points')
     ax1.grid(True, alpha=0.3)
-    ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    ax1.tick_params(axis='x', rotation=45)
     
-    # Add text box with statistics
-    textstr = '\n'.join([
-        f'Total stars: {sum(n_measurements)}',
-        f'Filters: {len(filters)}',
-        f'Median ZP range: {min(zp_medians):.2f} - {max(zp_medians):.2f}'
-    ])
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    ax1.text(0.02, 0.98, textstr, transform=ax1.transAxes, fontsize=10,
-            verticalalignment='top', bbox=props)
-    
-    # Plot 2: Comparison between median and mean
+    # Gráfico 2: Comparación de estadísticas
     x_pos = np.arange(len(filters))
     width = 0.35
     
     ax2.bar(x_pos - width/2, zp_medians, width, label='Median', 
             yerr=zp_errors_mad, capsize=5, alpha=0.7, color='skyblue',
             error_kw=dict(elinewidth=2, capthick=2))
-    ax2.bar(x_pos + width/2, zp_means, width, label='Mean', 
-            yerr=zp_errors_std, capsize=5, alpha=0.7, color='lightcoral',
-            error_kw=dict(elinewidth=2, capthick=2))
+    
+    # Añadir valores numéricos
+    for i, (med, n) in enumerate(zip(zp_medians, n_measurements)):
+        ax2.text(i, med + zp_errors_mad[i] + 0.1, f'n={n}\n{med:.2f}', 
+                ha='center', va='bottom', fontsize=8)
     
     ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(filters, rotation=45, ha='right')
+    ax2.set_xticklabels(filters, rotation=45)
     ax2.set_ylabel('Zero Point')
-    ax2.set_title('Comparison: Median vs Mean Zero Points (Robust vs Standard)')
+    ax2.set_title('Median Zero Points by Filter')
     ax2.legend()
     ax2.grid(True, alpha=0.3)
-    
-    # Add value labels on bars
-    for i, (med, mean) in enumerate(zip(zp_medians, zp_means)):
-        ax2.text(i - width/2, med + zp_errors_mad[i] + 0.1, f'{med:.2f}', 
-                ha='center', va='bottom', fontsize=8)
-        ax2.text(i + width/2, mean + zp_errors_std[i] + 0.1, f'{mean:.2f}', 
-                ha='center', va='bottom', fontsize=8)
     
     plt.tight_layout()
     
