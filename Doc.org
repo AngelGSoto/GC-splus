@@ -427,6 +427,12 @@ consistency throughout the entire calibration pipeline, potentially
 further improving the accuracy and precision of the final photometric
 measurements.
 
+*** Recalculating the Zero Points
+
+I modified the script that estimate de instrumenta magnitudes of the reference stars:
+
+: extract_splus_gaia_xp_corrected.py
+
 *** Final Catalog Structure
 | Column         | Description                                 | Special Values        |
 |-----------------+---------------------------------------------+---------------------------|
