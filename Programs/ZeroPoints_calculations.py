@@ -1,124 +1,244 @@
+#!/usr/bin/env python3
 '''
 Process all SPLUS fields to calculate zero points and output in SPLUS main survey format
+Corrected version for consistency with the new corrected catalogs
 '''
 import glob
 import subprocess
 import pandas as pd
 import os
 import numpy as np
+import logging
+import sys
+from pathlib import Path
 
-# Find all CSV files
-csv_files = glob.glob("CenA*_gaia_xp_matches_corrected.csv")
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('zero_points_batch_processing.log')
+    ]
+)
 
-# Process each field
-all_detailed_results = []
-all_splus_results = []
-
-for csv_file in csv_files:
-    print(f"Processing {csv_file}...")
+def run_zero_point_calculation(csv_file, script_path='../Programs/calculate_zero_points.py'):
+    """
+    Run zero point calculation for a single field with proper error handling
+    """
+    field_name = Path(csv_file).stem.replace('_gaia_xp_matches_corrected', '')
     
-    # Run the zero point calculation
-    result = subprocess.run([
-        'python', '../Programs/calculate_zero_points.py', 
-        csv_file, 
-        '--json-dir', '.'
-    ], capture_output=True, text=True)
+    # Check if zero points file already exists to avoid reprocessing
+    output_file = f'{field_name}_zero_points_corrected.csv'
+    if os.path.exists(output_file):
+        logging.info(f"Zero points file already exists for {field_name}, skipping calculation")
+        return True, field_name
     
-    if result.returncode == 0:
-        print(f"Successfully processed {csv_file}")
+    # Check if the calculation script exists
+    if not os.path.exists(script_path):
+        logging.error(f"Calculation script not found: {script_path}")
+        return False, field_name
+    
+    logging.info(f"Processing {csv_file}...")
+    
+    try:
+        # Run the zero point calculation with timeout
+        result = subprocess.run([
+            'python', script_path, 
+            csv_file, 
+            '--json-dir', '.',
+            '--plot'
+        ], capture_output=True, text=True, timeout=300)  # 5 minute timeout
         
-        # Read the detailed results file
-        field_name = csv_file.split('_gaia_xp_matches_corrected.csv')[0]
-        detailed_file = f'{field_name}_zero_points_corrected.csv'
+        if result.returncode == 0:
+            logging.info(f"Successfully processed {field_name}")
+            
+            # Verify the output file was created
+            if os.path.exists(output_file):
+                return True, field_name
+            else:
+                logging.error(f"Output file not created: {output_file}")
+                return False, field_name
+        else:
+            logging.error(f"Error processing {field_name}: {result.stderr}")
+            # Log the full error for debugging
+            with open(f'{field_name}_zero_points_error.log', 'w') as f:
+                f.write(f"STDOUT:\n{result.stdout}\n")
+                f.write(f"STDERR:\n{result.stderr}\n")
+            return False, field_name
+            
+    except subprocess.TimeoutExpired:
+        logging.error(f"Timeout processing {field_name}")
+        return False, field_name
+    except Exception as e:
+        logging.error(f"Unexpected error processing {field_name}: {e}")
+        return False, field_name
+
+def process_field_results(field_name):
+    """
+    Process the results for a single field and extract the zero points
+    """
+    detailed_file = f'{field_name}_zero_points_corrected.csv'
+    
+    if not os.path.exists(detailed_file):
+        logging.warning(f"Detailed results file not found: {detailed_file}")
+        return None, None
+    
+    try:
+        # Read detailed results
+        df_detailed = pd.read_csv(detailed_file)
+        df_detailed['Field'] = field_name
         
-        try:
-            # Read detailed results
-            df_detailed = pd.read_csv(detailed_file)
-            df_detailed['Field'] = field_name
-            all_detailed_results.append(df_detailed)
-            
-            # Create SPLUS format row - SOLO NOMBRE DEL CAMPO Y ZERO POINTS
-            splus_row = {
-                'field': field_name
-            }
-            
-            # Add zero points for each filter
-            for _, row in df_detailed.iterrows():
-                filter_name = row['Filter']
+        # Create SPLUS format row - only field name and zero points
+        splus_row = {'field': field_name}
+        
+        # Add zero points for each filter
+        valid_filters = 0
+        for _, row in df_detailed.iterrows():
+            filter_name = row['Filter']
+            if pd.notna(row['Median_ZP']) and row['Median_ZP'] != 'NaN':
                 if filter_name.startswith('mag_inst_'):
-                    # Convert to SPLUS column name (e.g., mag_F378 -> F378)
+                    # Convert to SPLUS column name (e.g., mag_inst_F378 -> F378)
                     splus_col = filter_name.replace('mag_inst_', '')
-                    splus_row[splus_col] = row['Median_ZP']
+                    splus_row[splus_col] = float(row['Median_ZP'])
+                    valid_filters += 1
+        
+        if valid_filters == 0:
+            logging.warning(f"No valid zero points found for {field_name}")
+            return None, None
             
-            all_splus_results.append(splus_row)
+        logging.info(f"Extracted zero points for {valid_filters} filters in {field_name}")
+        return df_detailed, splus_row
+        
+    except Exception as e:
+        logging.error(f"Error processing results for {field_name}: {e}")
+        return None, None
+
+def main():
+    # Find all corrected CSV files
+    csv_files = glob.glob("CenA*_gaia_xp_matches_corrected.csv")
+    
+    if not csv_files:
+        logging.error("No corrected CSV files found matching pattern 'CenA*_gaia_xp_matches_corrected.csv'")
+        logging.info("Available CSV files:")
+        for f in glob.glob("*.csv"):
+            logging.info(f"  {f}")
+        return
+    
+    logging.info(f"Found {len(csv_files)} corrected CSV files to process")
+    
+    # Process each field
+    all_detailed_results = []
+    all_splus_results = []
+    processed_fields = []
+    failed_fields = []
+    
+    for csv_file in sorted(csv_files):
+        success, field_name = run_zero_point_calculation(csv_file)
+        
+        if success:
+            detailed_data, splus_data = process_field_results(field_name)
             
-        except Exception as e:
-            print(f"Could not process results for {field_name}: {e}")
-    else:
-        print(f"Error processing {csv_file}: {result.stderr}")
+            if detailed_data is not None and splus_data is not None:
+                all_detailed_results.append(detailed_data)
+                all_splus_results.append(splus_data)
+                processed_fields.append(field_name)
+            else:
+                failed_fields.append(field_name)
+        else:
+            failed_fields.append(field_name)
+    
+    # Save detailed results (original format)
+    if all_detailed_results:
+        combined_detailed = pd.concat(all_detailed_results, ignore_index=True)
+        
+        # Ensure the output directory exists
+        os.makedirs('Results', exist_ok=True)
+        
+        detailed_output = 'Results/all_fields_zero_points_detailed_corrected.csv'
+        combined_detailed.to_csv(detailed_output, index=False)
+        logging.info(f"Detailed results saved to {detailed_output}")
+        
+        # Calculate average zero points across all fields
+        avg_zp = combined_detailed.groupby('Filter').agg({
+            'Median_ZP': ['mean', 'std', 'count'],
+            'STD_MAD': 'mean'
+        }).reset_index()
+        
+        # Flatten column names
+        avg_zp.columns = ['Filter', 'Average_Median_ZP', 'Std_Median_ZP', 'N_Fields', 'Average_STD_MAD']
+        
+        avg_output = 'Results/average_zero_points_detailed_corrected.csv'
+        avg_zp.to_csv(avg_output, index=False)
+        logging.info(f"Average zero points saved to {avg_output}")
+        
+        # Print detailed summary
+        logging.info("\n=== DETAILED SUMMARY ===")
+        for _, row in avg_zp.iterrows():
+            if pd.notna(row['Average_Median_ZP']):
+                logging.info(f"{row['Filter']}: {row['Average_Median_ZP']:.6f} ± {row['Std_Median_ZP']:.6f} (from {int(row['N_Fields'])} fields)")
 
-# Save detailed results (original format)
-if all_detailed_results:
-    combined_detailed = pd.concat(all_detailed_results, ignore_index=True)
-    combined_detailed.to_csv('all_fields_zero_points_detailed_corrected.csv', index=False)
-    print("Detailed results saved to all_fields_zero_points_detailed_corrected.csv")
+    # Save SPLUS format results (only field and filters)
+    if all_splus_results:
+        splus_df = pd.DataFrame(all_splus_results)
+        
+        # Define column order - only field and filters
+        filter_cols = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
+        column_order = ['field'] + filter_cols
+        
+        # Ensure all columns are present (fill missing with NaN)
+        for col in column_order:
+            if col not in splus_df.columns:
+                splus_df[col] = np.nan
+        
+        # Reorder columns and filter only the ones we want
+        splus_df = splus_df[column_order]
+        
+        # Save with appropriate precision
+        splus_output = 'Results/all_fields_zero_points_splus_format_corrected.csv'
+        splus_df.to_csv(splus_output, index=False, float_format='%.6f')
+        logging.info(f"SPLUS format results saved to {splus_output}")
+        
+        # Calculate averages for SPLUS format
+        avg_splus = splus_df[filter_cols].mean()
+        std_splus = splus_df[filter_cols].std()
+        count_splus = splus_df[filter_cols].count()
+        
+        avg_splus_df = pd.DataFrame({
+            'Filter': avg_splus.index,
+            'Average_ZP': avg_splus.values,
+            'STD_ZP': std_splus.values,
+            'N_Fields': count_splus.values
+        })
+        
+        avg_splus_output = 'Results/average_zero_points_splus_format_corrected.csv'
+        avg_splus_df.to_csv(avg_splus_output, index=False, float_format='%.6f')
+        logging.info(f"Average SPLUS format zero points saved to {avg_splus_output}")
+        
+        # Print SPLUS format summary
+        logging.info("\n=== SPLUS FORMAT SUMMARY ===")
+        logging.info(f"Successfully processed {len(splus_df)} fields")
+        for _, row in avg_splus_df.iterrows():
+            if pd.notna(row['Average_ZP']):
+                logging.info(f"{row['Filter']}: {row['Average_ZP']:.6f} ± {row['STD_ZP']:.6f} (from {int(row['N_Fields'])} fields)")
     
-    # Calculate average zero points across all fields
-    avg_zp = combined_detailed.groupby('Filter').agg({
-        'Median_ZP': 'mean',
-        'STD_MAD': 'mean',
-        'N_Stars': 'sum'
-    }).reset_index()
+    # Summary statistics
+    logging.info("\n=== PROCESSING SUMMARY ===")
+    logging.info(f"Total fields found: {len(csv_files)}")
+    logging.info(f"Successfully processed: {len(processed_fields)}")
+    logging.info(f"Failed: {len(failed_fields)}")
     
-    avg_zp.rename(columns={
-        'Median_ZP': 'Average_Median_ZP',
-        'STD_MAD': 'Average_STD_MAD'
-    }, inplace=True)
+    if processed_fields:
+        logging.info("Successfully processed fields: " + ", ".join(sorted(processed_fields)))
     
-    avg_zp.to_csv('average_zero_points_detailed_corrected.csv', index=False)
-    print("Average zero points saved to average_zero_points_detailed_corrected.csv")
+    if failed_fields:
+        logging.warning("Failed fields: " + ", ".join(sorted(failed_fields)))
+    
+    # Final output format reminder
+    logging.info("\n=== OUTPUT FILES ===")
+    logging.info("Detailed results: Results/all_fields_zero_points_detailed_corrected.csv")
+    logging.info("SPLUS format: Results/all_fields_zero_points_splus_format_corrected.csv")
+    logging.info("Final output format: field, F378, F395, F410, F430, F515, F660, F861")
 
-# Save SPLUS format results (sin RA y DEC)
-if all_splus_results:
-    splus_df = pd.DataFrame(all_splus_results)
-    
-    # Define column order - SOLO field y filtros
-    column_order = ['field', 'F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
-    
-    # Ensure all columns are present (fill missing with NaN)
-    for col in column_order:
-        if col not in splus_df.columns:
-            splus_df[col] = np.nan
-    
-    # Reorder columns
-    splus_df = splus_df[column_order]
-    
-    # Save with appropriate precision
-    splus_df.to_csv('all_fields_zero_points_splus_format_corrected.csv', index=False, float_format='%.6f')
-    print("SPLUS format results saved to all_fields_zero_points_splus_format_corrected.csv")
-    
-    # Calculate averages for SPLUS format
-    filter_cols = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
-    avg_splus = splus_df[filter_cols].mean()
-    std_splus = splus_df[filter_cols].std()
-    
-    avg_splus_df = pd.DataFrame({
-        'Filter': avg_splus.index,
-        'Average_ZP': avg_splus.values,
-        'STD_ZP': std_splus.values
-    })
-    
-    avg_splus_df.to_csv('average_zero_points_splus_format_corrected.csv', index=False, float_format='%.6f')
-    print("Average SPLUS format zero points saved to average_zero_points_splus_format_corrected.csv")
-    
-    # Print summary
-    print("\n=== SPLUS FORMAT SUMMARY ===")
-    print(f"Processed {len(splus_df)} fields")
-    for _, row in avg_splus_df.iterrows():
-        print(f"{row['Filter']}: {row['Average_ZP']:.6f} ± {row['STD_ZP']:.6f}")
-
-else:
-    print("No results were processed!")
-
-print("\n=== COMPLETED ===")
-print("Final output format: field, F378, F395, F410, F430, F515, F660, F861")
+if __name__ == "__main__":
+    main()
