@@ -66,43 +66,72 @@ def model_background_residuals(data, background_box_size=100):
         logging.warning(f"Background residual modeling failed: {e}. Using original image.")
         return data, np.nanstd(data)
 
-def compute_empirical_aperture_correction(data, header, positions, pixscale, 
-                                         small_radius_arcsec=1.5, large_radius_arcsec=6.0):
+def calculate_splus_official_aperture_correction(data, header, star_positions, filter_name):
     """
-    Calcula corrección de apertura empírica usando las mismas estrellas de referencia.
+    Calcula la corrección de apertura según la metodología oficial de S-PLUS
+    Usa 32 aperturas entre 1-50 arcsec y crecimiento de curva
     """
     try:
-        small_r_px = small_radius_arcsec / pixscale
-        large_r_px = large_radius_arcsec / pixscale
-
-        # Crear aperturas
-        small_ap = CircularAperture(positions, r=small_r_px)
-        large_ap = CircularAperture(positions, r=large_r_px)
-
-        # Fotometría
-        small_tab = aperture_photometry(data, small_ap)
-        large_tab = aperture_photometry(data, large_ap)
-
-        flux_small = small_tab['aperture_sum']
-        flux_large = large_tab['aperture_sum']
+        pixscale = header.get('PIXSCALE', 0.55)
         
-        # Filtrar mediciones buenas
-        mask_good = (flux_small > 0) & (flux_large > 0) & (flux_large > flux_small)
+        # 32 aperturas entre 1 y 50 arcsec (diámetro) como en S-PLUS
+        aperture_diameters = np.linspace(1, 50, 32)
+        aperture_radii_px = (aperture_diameters / 2) / pixscale
         
-        if mask_good.sum() < 5:
-            logging.warning("Insufficient good stars for aperture correction measurement.")
-            return 1.0, 0.0, int(mask_good.sum())
-
-        # Calcular corrección
-        corr = (flux_large[mask_good] / flux_small[mask_good])
-        median_corr = np.median(corr)
-        corr_std = np.std(corr)
+        logging.info(f"Calculating S-PLUS official growth curve with {len(aperture_diameters)} apertures")
         
-        return float(median_corr), float(corr_std), int(mask_good.sum())
+        # Medir curvas de crecimiento para cada estrella
+        growth_fluxes = []
+        
+        for i, radius in enumerate(aperture_radii_px):
+            apertures = CircularAperture(star_positions, r=radius)
+            phot_table = aperture_photometry(data, apertures)
+            growth_fluxes.append(phot_table['aperture_sum'].data)
+        
+        growth_fluxes = np.array(growth_fluxes)
+        
+        # Normalizar a la apertura más grande (50 arcsec)
+        total_fluxes = growth_fluxes[-1]
+        
+        # Filtrar estrellas con flujos válidos
+        valid_mask = total_fluxes > 0
+        if np.sum(valid_mask) < 5:
+            logging.warning(f"Insufficient valid stars for aperture correction in {filter_name}")
+            return 0.0, 0.0, 0
+        
+        growth_fluxes_valid = growth_fluxes[:, valid_mask]
+        total_fluxes_valid = total_fluxes[valid_mask]
+        
+        # Curvas de crecimiento normalizadas
+        normalized_curves = growth_fluxes_valid / total_fluxes_valid
+        
+        # Curva de crecimiento promedio (mediana robusta)
+        mean_growth = np.median(normalized_curves, axis=1)
+        
+        # Encontrar la fracción en apertura de 3 arcsec (diámetro)
+        aperture_3arcsec_idx = np.argmin(np.abs(aperture_diameters - 3))
+        fraction_in_3arcsec = mean_growth[aperture_3arcsec_idx]
+        
+        if fraction_in_3arcsec <= 0:
+            logging.warning(f"Invalid fraction for aperture correction in {filter_name}")
+            return 0.0, 0.0, 0
+        
+        # Corrección en magnitudes (lo que se suma a la magnitud instrumental)
+        aperture_correction_mag = -2.5 * np.log10(fraction_in_3arcsec)
+        
+        # Factor de corrección para flujo
+        aperture_correction_flux = 1.0 / fraction_in_3arcsec
+        
+        n_stars = np.sum(valid_mask)
+        
+        logging.info(f"{filter_name}: S-PLUS aperture correction = {aperture_correction_mag:.3f} mag "
+                    f"(factor = {aperture_correction_flux:.3f}, n_stars={n_stars})")
+        
+        return aperture_correction_mag, aperture_correction_flux, n_stars
         
     except Exception as e:
-        logging.error(f"Error in aperture correction calculation: {e}")
-        return 1.0, 0.0, 0
+        logging.error(f"Error in S-PLUS aperture correction for {filter_name}: {e}")
+        return 0.0, 1.0, 0
 
 def extract_stars_corrected(image_path, reference_positions=None, threshold_sigma=3, 
                            background_box_size=100, aperture_diameter=3):
@@ -140,23 +169,13 @@ def extract_stars_corrected(image_path, reference_positions=None, threshold_sigm
             logging.warning(f"Could not interpret WCS in {image_path}")
             has_wcs = False
         
-        # Si no se proporcionan posiciones, detectar estrellas
-        if reference_positions is None:
-            fwhm_pixels = fwhm_arcsec / pixscale
-            std = mad_std(data_corrected)
-            daofind = DAOStarFinder(fwhm=fwhm_pixels, threshold=threshold_sigma*std)
-            sources = daofind(data_corrected)
-            
-            if sources is None:
-                logging.warning(f"No stars detected in {image_path}")
-                return pd.DataFrame()
-                
-            sources = sources.to_pandas()
-            positions = np.transpose([sources['xcentroid'], sources['ycentroid']])
-        else:
-            # Usar las posiciones de referencia proporcionadas
-            positions = reference_positions
-            sources = pd.DataFrame({'xcentroid': positions[:, 0], 'ycentroid': positions[:, 1]})
+        # Usar las posiciones de referencia proporcionadas
+        positions = reference_positions
+        sources = pd.DataFrame({'xcentroid': positions[:, 0], 'ycentroid': positions[:, 1]})
+        
+        # Calcular corrección de apertura usando metodología oficial S-PLUS
+        ap_corr_mag, ap_corr_flux, n_stars_ap = calculate_splus_official_aperture_correction(
+            data_corrected, header, positions, os.path.basename(image_path))
         
         # Fotometría de apertura con el mismo método que para cúmulos globulares
         aperture_radius_pixels = (aperture_diameter / 2.0) / pixscale
@@ -179,12 +198,8 @@ def extract_stars_corrected(image_path, reference_positions=None, threshold_sigm
         # Flux en ADU (sin normalizar por EXPTIME)
         flux = phot_table['aperture_sum'] - (bkg_mean_per_source * apertures.area)
         
-        # Calcular corrección de apertura empírica
-        ap_corr, ap_corr_std, n_stars = compute_empirical_aperture_correction(
-            data_corrected, header, positions, pixscale)
-        
-        # Aplicar corrección de apertura
-        flux_corrected = flux * ap_corr
+        # Aplicar corrección de apertura S-PLUS (en flujo)
+        flux_corrected = flux * ap_corr_flux
         
         # Calcular errores (igual que en el script de cúmulos)
         bkg_rms_e = bkg_rms * gain if not np.isnan(bkg_rms) else 0.0
@@ -198,19 +213,22 @@ def extract_stars_corrected(image_path, reference_positions=None, threshold_sigm
         
         # Magnitud instrumental corregida
         min_flux = 1e-10
-        mag_inst = -2.5 * np.log10(np.maximum(flux_corrected, min_flux))
+        mag_inst_uncorrected = -2.5 * np.log10(np.maximum(flux, min_flux))
+        mag_inst_corrected = -2.5 * np.log10(np.maximum(flux_corrected, min_flux))
         
         # SNR
         snr = np.where(flux_err > 0, flux_corrected / flux_err, 0.0)
         
         # Preparar resultados
+        sources['flux_adu_uncorrected'] = flux
         sources['flux_adu'] = flux_corrected
         sources['flux_err'] = flux_err
-        sources['mag_inst'] = mag_inst
+        sources['mag_inst_uncorrected'] = mag_inst_uncorrected
+        sources['mag_inst'] = mag_inst_corrected
         sources['snr'] = snr
-        sources['ap_correction'] = ap_corr
-        sources['ap_correction_std'] = ap_corr_std
-        sources['n_stars_ap_corr'] = n_stars
+        sources['ap_correction_mag'] = ap_corr_mag
+        sources['ap_correction_flux'] = ap_corr_flux
+        sources['n_stars_ap_corr'] = n_stars_ap
         
         # Coordenadas astronómicas si hay WCS
         if has_wcs:
@@ -229,8 +247,9 @@ def extract_stars_corrected(image_path, reference_positions=None, threshold_sigm
         sources['gain'] = gain
         sources['rdnoise'] = rdnoise
         
-        return sources[['ra', 'dec', 'flux_adu', 'flux_err', 'mag_inst', 'snr', 
-                       'ap_correction', 'ap_correction_std', 'n_stars_ap_corr',
+        return sources[['ra', 'dec', 'flux_adu_uncorrected', 'flux_adu', 'flux_err', 
+                       'mag_inst_uncorrected', 'mag_inst', 'snr', 
+                       'ap_correction_mag', 'ap_correction_flux', 'n_stars_ap_corr',
                        'fwhm', 'aperture_diameter', 'pixscale', 'gain', 'rdnoise']]
         
     except Exception as e:
@@ -267,12 +286,15 @@ def get_reference_positions_from_catalog(catalog_path, image_path):
         
         # Verificar dimensiones de la imagen
         with fits.open(image_path) as hdul:
-            for hdu in hdul:
+            for hdu in hdu:
                 if hasattr(hdu, 'data') and hdu.data is not None:
                     data_shape = hdu.data.shape
                     break
         
-        valid_mask = valid_mask & (x < data_shape[1]) & (y < data_shape[0])
+        # Asegurar que las estrellas estén lejos de los bordes para aperturas grandes
+        margin_pixels = int(25 / 0.55)  # 25 arcsec de margen para aperturas de 50 arcsec
+        valid_mask = valid_mask & (x > margin_pixels) & (x < data_shape[1] - margin_pixels)
+        valid_mask = valid_mask & (y > margin_pixels) & (y < data_shape[0] - margin_pixels)
         
         positions = np.column_stack((x[valid_mask], y[valid_mask]))
         
@@ -288,7 +310,7 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
     Procesa un campo aplicando las correcciones de fondo y apertura.
     """
     logging.info(f"\n{'='*60}")
-    logging.info(f"PROCESANDO CAMPO CON CORRECCIONES: {field_name}")
+    logging.info(f"PROCESANDO CAMPO CON CORRECCIONES S-PLUS: {field_name}")
     logging.info(f"{'='*60}")
     
     field_dir = os.path.join(base_dir, field_name)
@@ -298,7 +320,7 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
     
     # Archivos de entrada y salida
     input_catalog = f'{field_name}_gaia_xp_matches.csv'
-    output_catalog = f'{field_name}_gaia_xp_matches_corrected.csv'
+    output_catalog = f'{field_name}_gaia_xp_matches_splus_method.csv'
     
     # Verificar que el catálogo de entrada existe y tiene las columnas necesarias
     if not os.path.exists(input_catalog):
@@ -337,7 +359,7 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
                 logging.error("No valid reference positions found")
                 return False
         
-        # Extraer estrellas con correcciones
+        # Extraer estrellas con correcciones S-PLUS
         cat = extract_stars_corrected(image_file, reference_positions, 
                                      aperture_diameter=aperture_diameter)
         
@@ -346,7 +368,7 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
             continue
             
         band_catalogs[band] = cat
-        logging.info(f"{band}: {len(cat)} stars extracted with corrections.")
+        logging.info(f"{band}: {len(cat)} stars extracted with S-PLUS corrections.")
 
     if not band_catalogs:
         logging.error("No stars extracted from any band.")
@@ -367,12 +389,15 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
             combined_catalog = combined_catalog.iloc[:min_len]
         
         # Añadir columnas de este filtro
+        combined_catalog[f'mag_inst_uncorrected_{band}'] = cat['mag_inst_uncorrected'].values
         combined_catalog[f'mag_inst_{band}'] = cat['mag_inst'].values
+        combined_catalog[f'flux_adu_uncorrected_{band}'] = cat['flux_adu_uncorrected'].values
         combined_catalog[f'flux_adu_{band}'] = cat['flux_adu'].values
         combined_catalog[f'flux_err_{band}'] = cat['flux_err'].values
         combined_catalog[f'snr_{band}'] = cat['snr'].values
-        combined_catalog[f'ap_corr_{band}'] = cat['ap_correction'].values
-        combined_catalog[f'ap_corr_std_{band}'] = cat['ap_correction_std'].values
+        combined_catalog[f'ap_corr_mag_{band}'] = cat['ap_correction_mag'].values
+        combined_catalog[f'ap_corr_flux_{band}'] = cat['ap_correction_flux'].values
+        combined_catalog[f'n_stars_ap_corr_{band}'] = cat['n_stars_ap_corr'].values
         
         # Información instrumental (solo una vez por banda)
         if f'fwhm_{band}' not in combined_catalog.columns:
@@ -383,10 +408,18 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
     
     # Guardar resultados
     combined_catalog.to_csv(output_catalog, index=False)
-    logging.info(f"Corrected catalog saved to: {output_catalog}")
+    logging.info(f"S-PLUS method catalog saved to: {output_catalog}")
     logging.info(f"Total reference stars processed: {len(combined_catalog)}")
     
-    # Estadísticas
+    # Estadísticas de correcciones aplicadas
+    logging.info("\nS-PLUS APERTURE CORRECTIONS APPLIED:")
+    for band in band_catalogs.keys():
+        if f'ap_corr_mag_{band}' in combined_catalog.columns:
+            ap_corr = combined_catalog[f'ap_corr_mag_{band}'].iloc[0]
+            n_stars = combined_catalog[f'n_stars_ap_corr_{band}'].iloc[0] if f'n_stars_ap_corr_{band}' in combined_catalog.columns else 0
+            logging.info(f"  {band}: {ap_corr:.3f} mag (based on {n_stars} stars)")
+    
+    # Estadísticas de magnitudes
     for band in band_catalogs.keys():
         mag_col = f'mag_inst_{band}'
         if mag_col in combined_catalog.columns:
@@ -394,20 +427,23 @@ def process_field_corrected(field_name, base_dir=BASE_DATA_DIR, aperture_diamete
             if len(valid_mags) > 0:
                 mean_mag = valid_mags.mean()
                 std_mag = valid_mags.std()
-                logging.info(f"{band}: Mean mag = {mean_mag:.2f} ± {std_mag:.2f} (n={len(valid_mags)})")
+                logging.info(f"{band}: Mean corrected mag = {mean_mag:.2f} ± {std_mag:.2f} (n={len(valid_mags)})")
             else:
                 logging.info(f"{band}: No valid magnitudes")
     
     return True
 
 def main():
-    # Campos a procesar
+    # Campos a procesar (empezar con uno para prueba)
+    #test_fields = ['CenA01']  # Probar con uno primero
+    
+    # Campos a procesar (completos)
     fields = [
-        'CenA01', 'CenA02', 'CenA03', 'CenA04', 'CenA05', 'CenA06', 
-        'CenA07', 'CenA08', 'CenA09', 'CenA10', 'CenA11', 'CenA12',
-        'CenA13', 'CenA14', 'CenA15', 'CenA16', 'CenA17', 'CenA18',
-        'CenA19', 'CenA20', 'CenA21', 'CenA22', 'CenA23', 'CenA24'
-    ]
+         'CenA01', 'CenA02', 'CenA03', 'CenA04', 'CenA05', 'CenA06', 
+         'CenA07', 'CenA08', 'CenA09', 'CenA10', 'CenA11', 'CenA12',
+         'CenA13', 'CenA14', 'CenA15', 'CenA16', 'CenA17', 'CenA18',
+         'CenA19', 'CenA20', 'CenA21', 'CenA22', 'CenA23', 'CenA24'
+     ]
     
     # Procesar cada campo
     for field in fields:
@@ -416,7 +452,7 @@ def main():
             logging.error(f"Error processing field {field}. Continuing with next...")
         
         # Pausa entre campos
-        time.sleep(10)
+        time.sleep(2)
     
     logging.info("\nProcessing of all fields completed.")
     
