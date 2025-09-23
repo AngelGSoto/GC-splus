@@ -156,24 +156,72 @@ class SPLUSPhotometry:
             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
             return data, std
 
-    def calculate_aperture_correction_fallback(self, filter_name):
+    def calculate_splus_aperture_correction(self, data, header, source_positions, filter_name):
         """
-        Simple aperture correction factors for extended sources
+        Calculate aperture correction using S-PLUS official methodology
+        Uses growth curve analysis with 32 apertures from 1-50 arcsec
         """
-        # Conservative corrections for globular clusters
-        typical_corrections = {
-            'F378': {3: 1.2, 4: 1.15, 5: 1.1, 6: 1.05},
-            'F395': {3: 1.2, 4: 1.15, 5: 1.1, 6: 1.05},
-            'F410': {3: 1.2, 4: 1.15, 5: 1.1, 6: 1.05},
-            'F430': {3: 1.2, 4: 1.15, 5: 1.1, 6: 1.05},
-            'F515': {3: 1.15, 4: 1.1, 5: 1.05, 6: 1.02},
-            'F660': {3: 1.15, 4: 1.1, 5: 1.05, 6: 1.02},
-            'F861': {3: 1.15, 4: 1.1, 5: 1.05, 6: 1.02}
-        }
-        
-        corrections = typical_corrections.get(filter_name, {3: 1.0, 4: 1.0, 5: 1.0, 6: 1.0})
-        logging.info(f"Using aperture corrections for {filter_name}: {corrections}")
-        return corrections
+        try:
+            pixscale = header.get('PIXSCALE', self.pixel_scale)
+            
+            # 32 apertures between 1-50 arcsec (diameter) as in S-PLUS
+            aperture_diameters = np.linspace(1, 50, 32)
+            aperture_radii_px = (aperture_diameters / 2) / pixscale
+            
+            # Measure growth curves for each source
+            growth_fluxes = []
+            
+            for radius in aperture_radii_px:
+                apertures = CircularAperture(source_positions, r=radius)
+                phot_table = aperture_photometry(data, apertures)
+                growth_fluxes.append(phot_table['aperture_sum'].data)
+            
+            growth_fluxes = np.array(growth_fluxes)
+            
+            # Normalize to largest aperture (50 arcsec)
+            total_fluxes = growth_fluxes[-1]
+            
+            # Filter sources with valid fluxes
+            valid_mask = total_fluxes > 0
+            if np.sum(valid_mask) < 5:
+                logging.warning(f"Insufficient valid sources for aperture correction in {filter_name}")
+                return {ap: 1.0 for ap in self.apertures}
+            
+            growth_fluxes_valid = growth_fluxes[:, valid_mask]
+            total_fluxes_valid = total_fluxes[valid_mask]
+            
+            # Normalized growth curves
+            normalized_curves = growth_fluxes_valid / total_fluxes_valid
+            
+            # Median growth curve (robust)
+            median_growth = np.median(normalized_curves, axis=1)
+            
+            # Calculate correction factors for each aperture size
+            correction_factors = {}
+            
+            for aperture_size in self.apertures:
+                aperture_radius_arcsec = aperture_size / 2
+                aperture_radius_px = aperture_radius_arcsec / pixscale
+                
+                # Find closest measured radius
+                idx = np.argmin(np.abs(aperture_radii_px - aperture_radius_px))
+                fraction_in_aperture = median_growth[idx]
+                
+                if fraction_in_aperture > 0:
+                    correction = 1.0 / fraction_in_aperture
+                    # Apply reasonable constraints
+                    correction = max(1.0, min(correction, 3.0))
+                else:
+                    correction = 1.0
+                
+                correction_factors[aperture_size] = correction
+            
+            logging.info(f"S-PLUS aperture corrections for {filter_name}: {correction_factors}")
+            return correction_factors
+            
+        except Exception as e:
+            logging.error(f"Error in S-PLUS aperture correction for {filter_name}: {e}")
+            return {ap: 1.0 for ap in self.apertures}
 
     def safe_magnitude_calculation(self, flux, zero_point):
         """Calculate magnitudes safely handling non-positive fluxes"""
@@ -253,8 +301,9 @@ class SPLUSPhotometry:
                 
                 valid_positions = np.array(valid_positions)
                 
-                # Get aperture corrections
-                aperture_corrections = self.calculate_aperture_correction_fallback(filter_name)
+                # Calculate S-PLUS aperture corrections using science objects
+                aperture_corrections = self.calculate_splus_aperture_correction(
+                    data_corrected, header, valid_positions, filter_name)
                 
                 for aperture_size in self.apertures:
                     aperture_radius_px = (aperture_size / 2) / self.pixel_scale
@@ -298,6 +347,7 @@ class SPLUSPhotometry:
                         results.loc[results.index[idx], f'MAG_{filter_name}_{aperture_size}'] = mag[i]
                         results.loc[results.index[idx], f'MAGERR_{filter_name}_{aperture_size}'] = mag_err[i]
                         results.loc[results.index[idx], f'SNR_{filter_name}_{aperture_size}'] = snr[i]
+                        results.loc[results.index[idx], f'AP_CORR_{filter_name}_{aperture_size}'] = correction_factor
                     
                     # Debug image for one filter and aperture
                     if self.debug and filter_name == self.debug_filter and aperture_size == 4:
@@ -382,13 +432,15 @@ if __name__ == "__main__":
             # Fill NaN values
             for filter_name in photometry.filters:
                 for aperture in photometry.apertures:
-                    for col_suffix in ['FLUX', 'FLUXERR', 'MAG', 'MAGERR', 'SNR']:
+                    for col_suffix in ['FLUX', 'FLUXERR', 'MAG', 'MAGERR', 'SNR', 'AP_CORR']:
                         col = f'{col_suffix}_{filter_name}_{aperture}'
                         if col in final_results.columns:
                             if 'FLUX' in col:
                                 final_results[col].fillna(0.0, inplace=True)
                             elif 'MAG' in col or 'ERR' in col:
                                 final_results[col].fillna(99.0, inplace=True)
+                            elif 'AP_CORR' in col:
+                                final_results[col].fillna(1.0, inplace=True)
                             else:
                                 final_results[col].fillna(0.0, inplace=True)
             
@@ -408,7 +460,7 @@ if __name__ == "__main__":
             merged_catalog.to_csv(output_file, index=False, float_format='%.6f')
             logging.info(f"Final merged results saved to {output_file}")
             
-            # Print summary
+            # Print summary including aperture corrections
             logging.info(f"Total sources in original catalog: {len(photometry.original_catalog)}")
             logging.info(f"Total sources with measurements: {len(final_results)}")
             
@@ -420,7 +472,10 @@ if __name__ == "__main__":
                         if len(valid_data) > 0:
                             mean_snr = valid_data[f'SNR_{filter_name}_{aperture}'].mean()
                             mean_mag = valid_data[mag_col].mean()
-                            logging.info(f"{filter_name}_{aperture}: {len(valid_data)} valid, Mean SNR: {mean_snr:.1f}, Mean Mag: {mean_mag:.2f}")
+                            mean_ap_corr = valid_data[f'AP_CORR_{filter_name}_{aperture}'].mean()
+                            logging.info(f"{filter_name}_{aperture}: {len(valid_data)} valid, "
+                                       f"Mean SNR: {mean_snr:.1f}, Mean Mag: {mean_mag:.2f}, "
+                                       f"Mean AP Corr: {mean_ap_corr:.3f}")
         
     except Exception as e:
         logging.error(f"Execution error: {e}")

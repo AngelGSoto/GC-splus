@@ -74,6 +74,8 @@ python ../Programs/extract_splus_gaia_xp_final.py
 *** Objective
 Calculate synthetic SPLUS magnitudes from Gaia XP spectra.
 
+This script was mo
+
 *** Execution Command
 #+BEGIN_SRC sh
 for D in ./gaia_spectra_CenA*; do 
@@ -439,6 +441,13 @@ stars and science targets.
 - Used consistent background estimation parameters
 - Ensured same photometric procedures for both calibration and science targets
 
+The script was modified. To made the corrections propiamente.
+Ahora los archivos con las magnitudes in
+
+#+BEGIN_SRC sh
+f'{field_name}_gaia_xp_matches_splus_method.csv'
+#+END_SRC
+
 **** Verification of Results
 The corrected photometry shows excellent agreement with Taylor et al. (2017) 
 reference magnitudes, with mean differences of ±0.05 mag across all filters.
@@ -452,8 +461,6 @@ average_zero_points_detailed_corrected.csv         # Average zero-points (detail
 all_fields_zero_points_splus_format_corrected.csv  # Zero-points in SPLUS format
 average_zero_points_splus_format_corrected.csv     # Average zero-points (SPLUS format)
 #+END_SRC
-
-
 
 
 *** Final Catalog Structure
