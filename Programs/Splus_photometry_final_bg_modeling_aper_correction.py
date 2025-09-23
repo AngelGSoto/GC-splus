@@ -149,6 +149,7 @@ class SPLUSPhotometry:
             logging.warning(f"Background residual modeling failed: {e}. Using original image.")
             return data, np.nanstd(data)
 
+        
     def calculate_aperture_correction_growth_curve(self, field_name, filter_name, large_aperture_size=15):
         """
         ¡MEJOR MÉTODO! - Corrección de apertura usando curva de crecimiento
@@ -158,37 +159,35 @@ class SPLUSPhotometry:
         cache_key = f"{field_name}_{filter_name}"
         if cache_key in self.aperture_corrections:
             return self.aperture_corrections[cache_key]
-        
-        # Usar el archivo corregido de estrellas de referencia
-        ref_stars_file = f"{field_name}_gaia_xp_matches_corrected.csv"
+    
+        # Cargar estrellas de referencia con criterios simples
+        ref_stars_file = f"Results/{field_name}_gaia_xp_matches_corrected.csv"
         if not os.path.exists(ref_stars_file):
-            # Fallback al archivo original si el corregido no existe
             ref_stars_file = f"{field_name}_gaia_xp_matches.csv"
             if not os.path.exists(ref_stars_file):
-                logging.warning(f"Reference stars file {ref_stars_file} not found.")
+                logging.warning(f"Reference stars file not found.")
                 return {ap_size: 1.0 for ap_size in self.apertures}
 
         try:
             ref_stars_df = pd.read_csv(ref_stars_file)
-            logging.info(f"Loaded {len(ref_stars_df)} reference stars from {ref_stars_file}")
-            
-            # Criterios de selección más robustos
+            logging.info(f"Loaded {len(ref_stars_df)} reference stars")
+        
+            # CRITERIO SIMPLE Y ROBUSTO - sin depender de FLUX_AUTO
             mask = (
-                (ref_stars_df['gaia_ruwe'] < 1.4) &  # Estrellas de buena calidad
-                (ref_stars_df['gaia_phot_g_mean_mag'] > 14) &  # No demasiado brillantes
-                (ref_stars_df['gaia_phot_g_mean_mag'] < 19) &  # No demasiado débiles
-                (ref_stars_df['FLUX_AUTO'] > 1000)  # Señal suficiente
-            )
-            
+                (ref_stars_df['gaia_ruwe'] < 3.0) &  # Muy permisivo
+                (ref_stars_df['gaia_phot_g_mean_mag'] > 10) & 
+                (ref_stars_df['gaia_phot_g_mean_mag'] < 20)
+               )
+        
             good_stars = ref_stars_df[mask].copy()
-            logging.info(f"Found {len(good_stars)} good reference stars after filtering")
-            
+            logging.info(f"Using {len(good_stars)} stars for aperture correction")
+        
             if len(good_stars) < 5:
-                logging.warning(f"Not enough good reference stars. Using all available.")
+                logging.warning("Not enough stars. Using all available.")
                 good_stars = ref_stars_df.copy()
-                
+            
         except Exception as e:
-            logging.warning(f"Error loading reference stars: {e}")
+            logging.warning(f"Error in star selection: {e}")
             return {ap_size: 1.0 for ap_size in self.apertures}
 
         # Load the image
