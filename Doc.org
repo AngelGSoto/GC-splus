@@ -453,6 +453,9 @@ all_fields_zero_points_splus_format_corrected.csv  # Zero-points in SPLUS format
 average_zero_points_splus_format_corrected.csv     # Average zero-points (SPLUS format)
 #+END_SRC
 
+
+
+
 *** Final Catalog Structure
 | Column         | Description                                 | Special Values        |
 |-----------------+---------------------------------------------+---------------------------|
