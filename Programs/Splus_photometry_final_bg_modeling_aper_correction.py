@@ -19,7 +19,6 @@ from matplotlib.colors import LogNorm
 import logging
 from scipy import ndimage
 from scipy.optimize import curve_fit
-from scipy import interpolate
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
@@ -61,6 +60,7 @@ class SPLUSPhotometry:
         self.aperture_corrections = {}
         
     def get_field_center_from_header(self, field_name, filter_name='F660'):
+        # (Mantener igual que tu versión actual)
         possible_files = [
             os.path.join(field_name, f"{field_name}_{filter_name}.fits.fz"),
             os.path.join(field_name, f"{field_name}_{filter_name}.fits")
@@ -83,6 +83,7 @@ class SPLUSPhotometry:
         return None, None
     
     def is_source_in_field(self, source_ra, source_dec, field_ra, field_dec, field_radius_deg=0.84):
+        # (Mantener igual)
         coord1 = SkyCoord(ra=source_ra*u.deg, dec=source_dec*u.deg)
         coord2 = SkyCoord(ra=field_ra*u.deg, dec=field_dec*u.deg)
         separation = coord1.separation(coord2).degree
@@ -91,7 +92,7 @@ class SPLUSPhotometry:
     def model_background_residuals(self, data, field_name, filter_name):
         """
         Model and subtract background residuals for Centaurus A
-        This is the CORRECT approach for already background-subtracted images
+        (Mantener la versión actual que funciona mejor)
         """
         try:
             # Create a mask for bright objects
@@ -147,17 +148,50 @@ class SPLUSPhotometry:
         except Exception as e:
             logging.warning(f"Background residual modeling failed: {e}. Using original image.")
             return data, np.nanstd(data)
-    
-    def calculate_aperture_correction(self, field_name, filter_name, large_aperture_size=15):
+
+    def calculate_aperture_correction_growth_curve(self, field_name, filter_name, large_aperture_size=15):
         """
-        Calculate aperture correction based on FWHM from image header
+        ¡MEJOR MÉTODO! - Corrección de apertura usando curva de crecimiento
+        Basado en una very preliminar versión anterior que es más robusta
         """
         # Check cache first
         cache_key = f"{field_name}_{filter_name}"
         if cache_key in self.aperture_corrections:
             return self.aperture_corrections[cache_key]
         
-        # Get FWHM from image header
+        # Usar el archivo corregido de estrellas de referencia
+        ref_stars_file = f"{field_name}_gaia_xp_matches_corrected.csv"
+        if not os.path.exists(ref_stars_file):
+            # Fallback al archivo original si el corregido no existe
+            ref_stars_file = f"{field_name}_gaia_xp_matches.csv"
+            if not os.path.exists(ref_stars_file):
+                logging.warning(f"Reference stars file {ref_stars_file} not found.")
+                return {ap_size: 1.0 for ap_size in self.apertures}
+
+        try:
+            ref_stars_df = pd.read_csv(ref_stars_file)
+            logging.info(f"Loaded {len(ref_stars_df)} reference stars from {ref_stars_file}")
+            
+            # Criterios de selección más robustos
+            mask = (
+                (ref_stars_df['gaia_ruwe'] < 1.4) &  # Estrellas de buena calidad
+                (ref_stars_df['gaia_phot_g_mean_mag'] > 14) &  # No demasiado brillantes
+                (ref_stars_df['gaia_phot_g_mean_mag'] < 19) &  # No demasiado débiles
+                (ref_stars_df['FLUX_AUTO'] > 1000)  # Señal suficiente
+            )
+            
+            good_stars = ref_stars_df[mask].copy()
+            logging.info(f"Found {len(good_stars)} good reference stars after filtering")
+            
+            if len(good_stars) < 5:
+                logging.warning(f"Not enough good reference stars. Using all available.")
+                good_stars = ref_stars_df.copy()
+                
+        except Exception as e:
+            logging.warning(f"Error loading reference stars: {e}")
+            return {ap_size: 1.0 for ap_size in self.apertures}
+
+        # Load the image
         image_path = None
         for ext in ['.fits.fz', '.fits']:
             candidate = os.path.join(field_name, f"{field_name}_{filter_name}{ext}")
@@ -177,44 +211,119 @@ class SPLUSPhotometry:
                 else:
                     header = hdul[0].header
                     data = hdul[0].data.astype(float)
-                
-                # Get FWHM from header
-                fwhm_arcsec = header.get('FWHMMEAN', 1.5)
-                logging.info(f"FWHM for {field_name} {filter_name}: {fwhm_arcsec:.3f} arcsec")
-                
         except Exception as e:
-            logging.warning(f"Error reading header: {e}")
+            logging.warning(f"Error loading image: {e}")
             return {ap_size: 1.0 for ap_size in self.apertures}
 
-        # Calculate aperture correction based on FWHM and aperture size
-        correction_factors = {}
+        # Aplicar el mismo tratamiento de fondo que para la ciencia
+        data_processed, _ = self.model_background_residuals(data, field_name, filter_name)
+        wcs = WCS(header)
         
-        for ap_size in self.apertures:
-            aperture_radius_arcsec = ap_size / 2
-            
-            # Empirical formula based on FWHM and aperture size
-            if fwhm_arcsec < 1.5:
-                if ap_size <= 4:
-                    correction = 1.10 + 0.05 * (ap_size - 3)
-                else:
-                    correction = 1.15 + 0.03 * (ap_size - 4)
-            else:
-                # For poorer seeing, larger corrections needed
-                correction = 1.2 + 0.1 * (fwhm_arcsec - 1.0) + 0.05 * (ap_size - 3)
-            
-            # Ensure reasonable values
-            correction = min(max(correction, 1.05), 1.8)
-            correction_factors[ap_size] = correction
-            logging.info(f"Aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction:.3f}")
+        # Convertir posiciones a píxeles
+        coords = SkyCoord(ra=good_stars['ra'].values*u.deg, dec=good_stars['dec'].values*u.deg)
+        x, y = wcs.world_to_pixel(coords)
+        positions = np.column_stack((x, y))
         
-        # Cache the result
+        # Filtrar estrellas cerca de bordes
+        height, width = data_processed.shape
+        max_aperture = large_aperture_size / self.pixel_scale
+        valid_mask = (
+            (positions[:, 0] > max_aperture) & 
+            (positions[:, 0] < width - max_aperture) &
+            (positions[:, 1] > max_aperture) & 
+            (positions[:, 1] < height - max_aperture)
+        )
+        positions = positions[valid_mask]
+        
+        if len(positions) < 3:
+            logging.warning(f"Not enough stars away from edges for aperture correction")
+            return {ap_size: 1.0 for ap_size in self.apertures}
+        
+        # Calcular curva de crecimiento
+        aperture_radii_px = np.linspace(1.0, large_aperture_size/self.pixel_scale, 15)
+        growth_curves = []
+        
+        for radius in aperture_radii_px:
+            apertures = CircularAperture(positions, r=radius)
+            phot_table = aperture_photometry(data_processed, apertures)
+            growth_curves.append(phot_table['aperture_sum'].data)
+        
+        growth_curves = np.array(growth_curves)
+        
+        # Normalizar a la apertura más grande
+        total_flux = growth_curves[-1]
+        norm_curves = growth_curves / total_flux
+        
+        # Calcular curva promedio
+        mean_growth = np.mean(norm_curves, axis=1)
+        
+        # Ajustar modelo de curva de crecimiento
+        def growth_model(r, a, b):
+            """Modelo de curva de crecimiento: 1 - exp(-(r/b)^a)"""
+            return 1 - np.exp(-(r/b)**a)
+        
+        try:
+            # Ajustar modelo a los datos
+            popt, pcov = curve_fit(growth_model, aperture_radii_px, mean_growth, 
+                                  p0=[2.0, 5.0], bounds=([1.0, 2.0], [3.0, 15.0]))
+            
+            # Calcular factores de corrección
+            correction_factors = {}
+            flux_large = growth_model(large_aperture_size/self.pixel_scale, *popt)
+            
+            for ap_size in self.apertures:
+                radius_px = (ap_size / 2) / self.pixel_scale
+                flux_small = growth_model(radius_px, *popt)
+                correction = flux_large / flux_small
+                correction_factors[ap_size] = max(min(correction, 2.0), 1.0)
+                logging.info(f"Growth curve aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction_factors[ap_size]:.3f}")
+                
+        except Exception as e:
+            logging.warning(f"Curve fitting failed: {e}. Using empirical method.")
+            # Método empírico de respaldo
+            correction_factors = {}
+            total_flux_mean = np.mean(growth_curves[-1])
+            
+            for i, ap_size in enumerate(self.apertures):
+                radius_px = (ap_size / 2) / self.pixel_scale
+                idx = np.argmin(np.abs(aperture_radii_px - radius_px))
+                aperture_flux = np.mean(growth_curves[idx])
+                correction = total_flux_mean / aperture_flux
+                correction_factors[ap_size] = max(min(correction, 2.0), 1.0)
+                logging.info(f"Empirical aperture correction {field_name} {filter_name} {ap_size}arcsec: {correction_factors[ap_size]:.3f}")
+        
+        # Guardar en cache
         self.aperture_corrections[cache_key] = correction_factors
+        
+        # Graficar curva de crecimiento para debugging
+        if self.debug:
+            plt.figure(figsize=(10, 6))
+            plt.plot(aperture_radii_px * self.pixel_scale, mean_growth, 'bo-', label='Mean growth curve')
+            try:
+                x_fit = np.linspace(0.1, large_aperture_size/self.pixel_scale, 100)
+                y_fit = growth_model(x_fit, *popt)
+                plt.plot(x_fit * self.pixel_scale, y_fit, 'r-', label='Fitted model', alpha=0.7)
+            except:
+                pass
+            
+            # Marcar las aperturas que usamos
+            for ap_size in self.apertures:
+                radius_arcsec = ap_size / 2
+                plt.axvline(radius_arcsec, color='gray', linestyle='--', alpha=0.5)
+                plt.text(radius_arcsec, 0.1, f'{ap_size}"', rotation=90, va='bottom')
+            
+            plt.xlabel('Aperture Radius (arcsec)')
+            plt.ylabel('Fraction of Total Flux')
+            plt.title(f'Aperture Growth Curve: {field_name} {filter_name}')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.savefig(f'{field_name}_{filter_name}_growth_curve.png', dpi=150, bbox_inches='tight')
+            plt.close()
+        
         return correction_factors
-    
+
     def safe_magnitude_calculation(self, flux, zero_point):
-        """
-        Calculate magnitudes safely handling non-positive fluxes
-        """
+        """(Mantener igual)"""
         return np.where(flux > 0, zero_point - 2.5 * np.log10(flux), 99.0)
     
     def process_field(self, field_name):
@@ -224,11 +333,12 @@ class SPLUSPhotometry:
             logging.warning(f"Could not get field center for {field_name}. Skipping.")
             return None
         
-        # Pre-calculate aperture corrections for all filters
+        # ¡USAR EL MÉTODO DE CURVA DE CRECIMIENTO!
         aperture_corrections = {}
         for filter_name in self.filters:
-            aperture_corrections[filter_name] = self.calculate_aperture_correction(field_name, filter_name)
+            aperture_corrections[filter_name] = self.calculate_aperture_correction_growth_curve(field_name, filter_name)
         
+        # Resto del código igual...
         self.catalog[self.ra_col] = self.catalog[self.ra_col].astype(float)
         self.catalog[self.dec_col] = self.catalog[self.dec_col].astype(float)
         
@@ -268,7 +378,7 @@ class SPLUSPhotometry:
                 
                 wcs = WCS(header)
                 
-                # ¡CORRECTO! Modelar y restar residuales de fondo en lugar de hacer sustracción completa
+                # Usar tu método actual de fondo
                 data_corrected, bkg_rms = self.model_background_residuals(data, field_name, filter_name)
                 
                 ra_values = field_sources[self.ra_col].astype(float).values
@@ -316,7 +426,7 @@ class SPLUSPhotometry:
                     # Error estimation
                     flux_err = np.sqrt(np.abs(flux) + (apertures.area * bkg_rms**2))
                     
-                    # Apply aperture correction
+                    # ¡APLICAR CORRECCIÓN DE CURVA DE CRECIMIENTO!
                     correction_factor = aperture_corrections[filter_name].get(aperture_size, 1.0)
                     flux_corrected = flux * correction_factor
                     flux_err_corrected = flux_err * correction_factor
@@ -351,7 +461,7 @@ class SPLUSPhotometry:
         return results
     
     def save_debug_image(self, data, positions, aperture_radius, field_name, filter_name):
-        # Select a representative source near the center
+        # (Mantener igual)
         center_y, center_x = data.shape[0]//2, data.shape[1]//2
         distances = np.sqrt((positions[:,0]-center_x)**2 + (positions[:,1]-center_y)**2)
         idx = np.argmin(distances)
@@ -382,9 +492,9 @@ if __name__ == "__main__":
         logging.error(f"Zeropoints file {zeropoints_file} not found")
         exit(1)
     
-    # ----------- OPCIÓN DE TEST O MODO COMPLETO -----------
-    test_mode = True      # Cambia a False para procesar todos los campos
-    test_field = 'CenA01' # Campo de prueba (puedes cambiarlo por otro)
+    # Configuración de prueba
+    test_mode = True
+    test_field = 'CenA01'
     
     if test_mode:
         fields = [test_field]
@@ -392,7 +502,6 @@ if __name__ == "__main__":
     else:
         fields = [f'CenA{i:02d}' for i in range(1, 25)]
         logging.info("Procesando todos los campos")
-    # ------------------------------------------------------
     
     try:
         all_results = []
