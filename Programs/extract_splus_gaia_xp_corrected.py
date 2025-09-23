@@ -23,30 +23,56 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 SPLUS_FILTERS = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
 BASE_DATA_DIR = "."
 
-def model_background_residuals(data, background_box_size=100):
-    """Modela y resta residuos de fondo"""
+def model_background_residuals(data, field_name, filter_name):
+    """
+    Revised background treatment for S-PLUS images that are already background subtracted
+    IDÉNTICA a la usada en el script de cúmulos globulares
+    """
     try:
+        # Get basic statistics of the original image
         mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-        mask = data > median + 5 * std
-        dilated_mask = ndimage.binary_dilation(mask, structure=np.ones((15, 15)))
         
+        # For S-PLUS images that are already background subtracted, we should be careful
+        # not to over-subtract. Use a more conservative approach.
+        
+        # Only model residuals if there's significant large-scale structure
+        if std < 1.0:  # Very flat image, minimal background residuals
+            logging.info(f"Image appears flat (std={std:.3f}). Skipping background modeling.")
+            return data, std
+        
+        # Create a mask for bright objects (more conservative thresholds)
+        mask = data > median + 10 * std  # Higher threshold to avoid masking stars
+        
+        # Dilate the mask moderately
+        dilated_mask = ndimage.binary_dilation(mask, structure=np.ones((5, 5)))
+        
+        # Use larger boxes to avoid over-fitting star light
         sigma_clip = SigmaClip(sigma=3.0)
         bkg = Background2D(data, 
-                          box_size=background_box_size, 
+                          box_size=200,  # Larger boxes for smoother background
                           filter_size=5,
                           sigma_clip=sigma_clip, 
                           bkg_estimator=MedianBackground(), 
                           mask=dilated_mask,
-                          exclude_percentile=10)
+                          exclude_percentile=20)  # Exclude more pixels
         
-        data_corrected = data - bkg.background
+        # Only subtract if the background model has significant structure
+        bkg_range = np.max(bkg.background) - np.min(bkg.background)
+        if bkg_range < 3 * std:  # Background model is relatively flat
+            logging.info(f"Background model is flat (range={bkg_range:.3f}). Minimal subtraction applied.")
+            data_corrected = data - np.median(bkg.background)  # Just subtract median
+        else:
+            data_corrected = data - bkg.background
+        
         bkg_rms = bkg.background_rms_median
-        logging.info(f"Background residuals modeled with box_size={background_box_size}")
+        
+        logging.info(f"Background treated: original std={std:.3f}, background range={bkg_range:.3f}")
         return data_corrected, bkg_rms
         
     except Exception as e:
-        logging.warning(f"Background residual modeling failed: {e}")
-        return data, np.nanstd(data)
+        logging.warning(f"Background treatment failed: {e}. Using original image.")
+        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+        return data, std
 
 def calculate_splus_official_aperture_correction(data, header, star_positions, filter_name):
     """Calcula corrección de apertura según metodología S-PLUS"""
@@ -134,7 +160,7 @@ def get_reference_positions_from_catalog(catalog_path, image_path):
         logging.error(f"Error getting reference positions: {e}")
         return np.array([]), pd.DataFrame()
 
-def extract_stars_corrected(image_path, reference_positions, aperture_diameter=3):
+def extract_stars_corrected(image_path, reference_positions, field_name, aperture_diameter=3):
     """Extrae estrellas con metodología corregida"""
     try:
         with fits.open(image_path) as hdul:
@@ -151,7 +177,20 @@ def extract_stars_corrected(image_path, reference_positions, aperture_diameter=3
                 return pd.DataFrame()
         
         pixscale = header.get('PIXSCALE', 0.55)
-        data_corrected, bkg_rms = model_background_residuals(data)
+        
+        # Obtener nombre del filtro del nombre del archivo
+        filter_name = None
+        for band in SPLUS_FILTERS:
+            if f"_{band}." in image_path:
+                filter_name = band
+                break
+        
+        if filter_name is None:
+            logging.error(f"Could not determine filter from image path: {image_path}")
+            return pd.DataFrame()
+        
+        # Aplicar corrección de fondo IDÉNTICA a la de cúmulos globulares
+        data_corrected, bkg_rms = model_background_residuals(data, field_name, filter_name)
         
         try:
             wcs = WCS(header)
@@ -164,7 +203,7 @@ def extract_stars_corrected(image_path, reference_positions, aperture_diameter=3
         
         # Calcular corrección de apertura
         ap_corr_mag, ap_corr_flux, n_stars_ap = calculate_splus_official_aperture_correction(
-            data_corrected, header, positions, os.path.basename(image_path))
+            data_corrected, header, positions, filter_name)
         
         # Fotometría
         aperture_radius_pixels = (aperture_diameter / 2.0) / pixscale
@@ -252,7 +291,7 @@ def process_field_corrected(field_name):
                 logging.error("No valid reference positions found")
                 return False
         
-        cat = extract_stars_corrected(image_file, reference_positions)
+        cat = extract_stars_corrected(image_file, reference_positions, field_name)
         if len(cat) == 0:
             logging.warning(f"{band}: No stars extracted")
             continue
@@ -279,6 +318,7 @@ def process_field_corrected(field_name):
         combined_catalog[f'snr_{band}'] = cat['snr'].values
         combined_catalog[f'ap_corr_mag_{band}'] = cat['ap_correction_mag'].values
         combined_catalog[f'ap_corr_flux_{band}'] = cat['ap_correction_flux'].values
+        combined_catalog[f'n_stars_ap_corr_{band}'] = cat['n_stars_ap_corr'].values
     
     combined_catalog.to_csv(output_catalog, index=False)
     logging.info(f"Results saved to: {output_catalog}")
@@ -290,14 +330,20 @@ def process_field_corrected(field_name):
             valid_mags = combined_catalog[mag_col][combined_catalog[mag_col] < 50]
             if len(valid_mags) > 0:
                 mean_mag = valid_mags.mean()
-                logging.info(f"{band}: Mean mag = {mean_mag:.2f} (n={len(valid_mags)})")
+                logging.info(f"{band}: Mean corrected mag = {mean_mag:.2f} (n={len(valid_mags)})")
     
     return True
 
 def main():
     test_fields = ['CenA01']  # Probar con uno primero
+    fields = [
+        'CenA01', 'CenA02', 'CenA03', 'CenA04', 'CenA05', 'CenA06', 
+        'CenA07', 'CenA08', 'CenA09', 'CenA10', 'CenA11', 'CenA12',
+        'CenA13', 'CenA14', 'CenA15', 'CenA16', 'CenA17', 'CenA18',
+        'CenA19', 'CenA20', 'CenA21', 'CenA22', 'CenA23', 'CenA24'
+    ]
     
-    for field in test_fields:
+    for field in fields:
         success = process_field_corrected(field)
         if not success:
             logging.error(f"Error processing {field}")
