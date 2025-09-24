@@ -104,7 +104,7 @@ def flux_error_propagation(mag, mag_err, wl_angstrom):
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description="Generate photo-spectra for globular clusters in NGC 5128")
-parser.add_argument("--catalog", type=str, default="Results/all_fields_gc_photometry_merged.csv",
+parser.add_argument("--catalog", type=str, default="Results/all_fields_gc_photometry_merged_corrected.csv",
                     help="Input catalog with photometry data")
 parser.add_argument("--aper", type=int, default=5, choices=[3, 4, 5, 6],
                     help="Aperture size to use (3, 4, 5, or 6 arcsec)")

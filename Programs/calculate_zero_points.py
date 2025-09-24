@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Calculate zero points for SPLUS filters using instrumental and synthetic magnitudes
-Corrected version for consistency with the new corrected catalogs
+Updated version for splus_method CSV files
 """
 from __future__ import print_function
 import numpy as np
@@ -19,13 +19,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 
 # Filter mapping between CSV columns and JSON keys
 filter_mapping = {
-    'mag_inst_F378': 'F0378',
-    'mag_inst_F395': 'F0395', 
-    'mag_inst_F410': 'F0410',
-    'mag_inst_F430': 'F0430',
-    'mag_inst_F515': 'F0515',
-    'mag_inst_F660': 'F0660',
-    'mag_inst_F861': 'F0861'
+    'mag_inst_corrected_F378': 'F0378',
+    'mag_inst_corrected_F395': 'F0395', 
+    'mag_inst_corrected_F410': 'F0410',
+    'mag_inst_corrected_F430': 'F0430',
+    'mag_inst_corrected_F515': 'F0515',
+    'mag_inst_corrected_F660': 'F0660',
+    'mag_inst_corrected_F861': 'F0861'
 }
 
 def calculate_zero_points(csv_file, json_dir):
@@ -46,8 +46,10 @@ def calculate_zero_points(csv_file, json_dir):
         logging.error(f"Error reading CSV file {csv_file}: {e}")
         return {}, {}
     
-    # Extract field name from CSV filename
-    if '_gaia_xp_matches_corrected.csv' in csv_file:
+    # Extract field name from CSV filename - UPDATED FOR NEW FILES
+    if '_gaia_xp_matches_splus_method.csv' in csv_file:
+        field_name = os.path.basename(csv_file).split('_gaia_xp_matches_splus_method.csv')[0]
+    elif '_gaia_xp_matches_corrected.csv' in csv_file:
         field_name = os.path.basename(csv_file).split('_gaia_xp_matches_corrected.csv')[0]
     else:
         # Fallback for different naming conventions
@@ -230,7 +232,7 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     
     for i, (filt, data) in enumerate(zero_points_data.items()):
         if data is not None and len(all_zp_values[filt]) > 0:
-            filter_short = filt.replace('mag_inst_', '')
+            filter_short = filt.replace('mag_inst_corrected', '')
             filters.append(filter_short)
             zp_medians.append(data['median'])
             zp_errors_mad.append(data['std_mad'])
@@ -282,8 +284,8 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     
     plt.tight_layout()
     
-    # Save plot
-    plot_filename = f'{field_name}_zero_points_corrected.png'
+    # Save plot - UPDATED FILENAME
+    plot_filename = f'{field_name}_zero_points_splus_method.png'
     plt.savefig(plot_filename, dpi=300, bbox_inches='tight')
     plt.close()
     
@@ -292,10 +294,10 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
 def main():
     parser = argparse.ArgumentParser(
         description="""Calculate zero points for SPLUS filters using robust median statistics
-                     for corrected instrumental photometry""")
+                     for splus_method instrumental photometry""")
     
     parser.add_argument("CSV", type=str,
-                        help="CSV file with corrected instrumental magnitudes (_gaia_xp_matches_corrected.csv)")
+                        help="CSV file with instrumental magnitudes (_gaia_xp_matches_splus_method.csv)")
     
     parser.add_argument("--json-dir", type=str, default=".",
                         help="Directory containing JSON files with synthetic magnitudes")
@@ -316,14 +318,16 @@ def main():
     # Calculate zero points
     zp_results, all_zp_values = calculate_zero_points(args.CSV, args.json_dir)
     
-    # Extract field name for output files
-    if '_gaia_xp_matches_corrected.csv' in args.CSV:
+    # Extract field name for output files - UPDATED FOR NEW FILES
+    if '_gaia_xp_matches_splus_method.csv' in args.CSV:
+        field_name = os.path.basename(args.CSV).split('_gaia_xp_matches_splus_method.csv')[0]
+    elif '_gaia_xp_matches_corrected.csv' in args.CSV:
         field_name = os.path.basename(args.CSV).split('_gaia_xp_matches_corrected.csv')[0]
     else:
         field_name = os.path.basename(args.CSV).split('.csv')[0]
     
-    # Save results to file
-    output_file = f'{field_name}_zero_points_corrected.csv'
+    # Save results to file - UPDATED FILENAME
+    output_file = f'{field_name}_zero_points_splus_method.csv'
     
     try:
         with open(output_file, 'w') as f:
