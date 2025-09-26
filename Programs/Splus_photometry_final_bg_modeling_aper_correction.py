@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-splus_gc_photometry_corrected.py - Fotometría de cúmulos globulares con aperture correction correcto
-Aplica aperture correction solo a los cúmulos, usando factores calculados de estrellas de referencia
+Splus_photometry_final_bg_modeling_aper_correction.py - Fotometría de cúmulos globulares con aperture correction correcto
+Versión corregida: aplicación adecuada de la corrección de apertura y validación de errores.
+CON SOPORTE COMPLETO PARA WEIGHT MAPS Y ESTIMACIÓN PRECISA DE ERRORES.
 """
 
 import numpy as np
@@ -27,23 +28,17 @@ from scipy import ndimage
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 warnings.filterwarnings('ignore')
 
-class SPLUSGCPhotometry:
+class SPLUSGCPhotometryCorrected:
     def __init__(self, catalog_path, zeropoints_file, debug=False, debug_filter='F660'):
         """
         Inicializa la clase de fotometría para cúmulos globulares
-        
-        Parameters:
-        catalog_path: Path al catálogo de cúmulos globulares
-        zeropoints_file: Path al archivo de zero points calculados con estrellas SIN corregir
-        debug: Modo debug para guardar imágenes
-        debug_filter: Filtro para el cual guardar imágenes debug
         """
         if not os.path.exists(catalog_path):
             raise FileNotFoundError(f"Catalog file {catalog_path} does not exist")
         if not os.path.exists(zeropoints_file):
             raise FileNotFoundError(f"Zeropoints file {zeropoints_file} does not exist")
         
-        # Cargar zero points (calculados con magnitudes SIN aperture correction)
+        # Cargar zero points
         self.zeropoints_df = pd.read_csv(zeropoints_file)
         self.zeropoints = {}
         for _, row in self.zeropoints_df.iterrows():
@@ -52,7 +47,7 @@ class SPLUSGCPhotometry:
             for filt in ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']:
                 self.zeropoints[field][filt] = row[filt]
         
-        # Cargar catálogo de cúmulos globulares
+        # Cargar catálogo
         self.original_catalog = pd.read_csv(catalog_path)
         self.catalog = self.original_catalog.copy()
         logging.info(f"Loaded catalog with {len(self.catalog)} sources")
@@ -76,15 +71,43 @@ class SPLUSGCPhotometry:
         
         logging.info(f"Using columns: RA={self.ra_col}, DEC={self.dec_col}, ID={self.id_col}")
 
+    def validate_aperture_correction_factors(self, correction_factors, filter_name):
+        """
+        Valida que los factores de corrección sean razonables
+        """
+        reasonable_ranges = {
+            3: (1.0, 1.3),   # 0-30% de corrección para 3 arcsec
+            4: (1.0, 1.2),   # 0-20% para 4 arcsec
+            5: (1.0, 1.15),  # 0-15% para 5 arcsec
+            6: (1.0, 1.1)    # 0-10% para 6 arcsec
+        }
+        
+        validated_factors = {}
+        issues = []
+        
+        for aperture_size, factor in correction_factors.items():
+            min_val, max_val = reasonable_ranges.get(aperture_size, (1.0, 2.0))
+            
+            if factor < min_val or factor > max_val:
+                issues.append(f"Aperture {aperture_size}arcsec: factor {factor:.3f} fuera de rango razonable [{min_val:.1f}-{max_val:.1f}]")
+                # Forzar a valor razonable
+                if factor > max_val:
+                    validated_factors[aperture_size] = max_val
+                else:
+                    validated_factors[aperture_size] = min_val
+            else:
+                validated_factors[aperture_size] = factor
+        
+        if issues:
+            logging.warning(f"{filter_name}: Problemas con factores de corrección:")
+            for issue in issues:
+                logging.warning(f"  {issue}")
+        
+        return validated_factors
+
     def load_aperture_correction_factors(self, field_name):
         """
-        Carga los factores de aperture correction del archivo de estrellas de referencia
-        
-        Parameters:
-        field_name: Nombre del campo (ej: 'CenA01')
-        
-        Returns:
-        Dict con factores de corrección por filtro y apertura
+        Carga y VALIDA los factores de aperture correction
         """
         try:
             ref_catalog_path = f"{field_name}_gaia_xp_matches_splus_method.csv"
@@ -100,25 +123,32 @@ class SPLUSGCPhotometry:
                 for aperture_size in self.apertures:
                     col_name = f'ap_corr_{aperture_size}_{filter_name}'
                     if col_name in ref_df.columns:
-                        # Usar la mediana de los factores de todas las estrellas de referencia
-                        valid_factors = ref_df[col_name][ref_df[col_name].between(0.5, 5.0)]  # Rango razonable
+                        # Filtrar factores razonables
+                        valid_factors = ref_df[
+                            (ref_df[col_name] >= 0.5) & 
+                            (ref_df[col_name] <= 3.0)  # Rango más estricto
+                        ][col_name]
+                        
                         if len(valid_factors) > 0:
                             factor = float(valid_factors.median())
                             filter_corrections[aperture_size] = factor
                         else:
                             filter_corrections[aperture_size] = 1.0
-                            logging.warning(f"Invalid factors for {col_name}, using 1.0")
+                            logging.warning(f"{filter_name}: No hay factores válidos para {aperture_size}arcsec")
                     else:
                         filter_corrections[aperture_size] = 1.0
-                        logging.warning(f"Correction factor column not found: {col_name}")
+                        logging.warning(f"{filter_name}: Columna {col_name} no encontrada")
                 
-                corrections[filter_name] = filter_corrections
-                logging.info(f"{filter_name}: Aperture corrections loaded: {filter_corrections}")
+                # VALIDAR los factores
+                validated_factors = self.validate_aperture_correction_factors(filter_corrections, filter_name)
+                corrections[filter_name] = validated_factors
+                
+                logging.info(f"{filter_name}: Factores validados: {validated_factors}")
             
             return corrections
             
         except Exception as e:
-            logging.error(f"Error loading aperture corrections for {field_name}: {e}")
+            logging.error(f"Error loading aperture corrections: {e}")
             return self._get_default_corrections()
     
     def _get_default_corrections(self):
@@ -131,9 +161,6 @@ class SPLUSGCPhotometry:
     def check_splus_background_status(self, data, filter_name):
         """
         Verifica si la imagen SPLUS ya tiene el fondo restado
-        
-        Returns:
-        (needs_correction, bkg_rms)
         """
         try:
             mean, median, std = sigma_clipped_stats(data, sigma=3.0)
@@ -165,7 +192,7 @@ class SPLUSGCPhotometry:
                 return data, std
             
             # Máscara conservadora para fuentes brillantes
-            mask = data > median + 15 * std  # Umbral alto para no enmascarar cúmulos
+            mask = data > median + 15 * std
             
             # Dilatación mínima
             dilated_mask = ndimage.binary_dilation(mask, structure=np.ones((3, 3)))
@@ -173,7 +200,7 @@ class SPLUSGCPhotometry:
             # Boxes grandes para variaciones de gran escala
             sigma_clip = SigmaClip(sigma=3.0)
             bkg = Background2D(data, 
-                              box_size=200,  # Muy grande para suavizado
+                              box_size=200,
                               filter_size=5,
                               sigma_clip=sigma_clip, 
                               bkg_estimator=MedianBackground(), 
@@ -183,7 +210,7 @@ class SPLUSGCPhotometry:
             # Solo restar si el modelo muestra estructura significativa
             bkg_range = np.max(bkg.background) - np.min(bkg.background)
             if bkg_range < 2 * std:
-                data_corrected = data - np.median(bkg.background)  # Solo restar mediana
+                data_corrected = data - np.median(bkg.background)
                 logging.info(f"{filter_name}: Applied minimal background correction")
             else:
                 data_corrected = data - bkg.background
@@ -249,84 +276,198 @@ class SPLUSGCPhotometry:
         
         return None
 
-    def perform_photometry_with_error_propagation(self, data, positions, aperture_radius_px, 
-                                                 annulus_inner_px, annulus_outer_px, bkg_rms):
-        """
-        Realiza fotometría con propagación adecuada de errores
+    def find_weight_file(self, field_name, filter_name):
+        """Encuentra el archivo de peso para un campo y filtro dados"""
+        possible_patterns = [
+            f"{field_name}_{filter_name}.weight.fits.fz",
+            f"{field_name}_{filter_name}.weight.fits",
+            f"{field_name}_{filter_name}_weight.fits.fz", 
+            f"{field_name}_{filter_name}_weight.fits",
+            f"weight/{field_name}_{filter_name}.weight.fits"
+        ]
         
-        Returns:
-        flux, flux_err, snr, aperture_area
+        for pattern in possible_patterns:
+            weight_path = os.path.join(field_name, pattern)
+            if os.path.exists(weight_path):
+                logging.info(f"Found weight file: {weight_path}")
+                return weight_path
+        
+        logging.warning(f"Weight file not found for {field_name} {filter_name}")
+        return None
+
+    def validate_weight_map(self, weight_data):
+        """Valida que el weight map sea razonable"""
+        if weight_data is None:
+            return False, "Weight data is None"
+        
+        if weight_data.size == 0:
+            return False, "Weight data is empty"
+        
+        if np.all(weight_data <= 0):
+            return False, "All weight values are <= 0"
+        
+        if np.any(np.isnan(weight_data)):
+            return False, "Weight map contains NaN values"
+        
+        if np.any(np.isinf(weight_data)):
+            return False, "Weight map contains Inf values"
+        
+        valid_fraction = np.sum(weight_data > 0) / weight_data.size
+        if valid_fraction < 0.5:
+            return False, f"Less than 50% valid weights ({valid_fraction:.1%})"
+        
+        return True, "Valid weight map"
+
+    def load_and_validate_weight_map(self, weight_path, data_shape):
+        """Carga y valida el weight map"""
+        try:
+            with fits.open(weight_path) as whdul:
+                for whdu in whdul:
+                    if whdu.data is not None:
+                        weight_data = whdu.data.astype(float)
+                        break
+                else:
+                    raise ValueError("No data found in weight file")
+            
+            # Validar forma
+            if weight_data.shape != data_shape:
+                logging.warning(f"Weight map shape {weight_data.shape} doesn't match data shape {data_shape}")
+                return None
+            
+            # Validar contenido
+            is_valid, message = self.validate_weight_map(weight_data)
+            if not is_valid:
+                logging.warning(f"Invalid weight map: {message}")
+                return None
+            
+            # Calcular error map (relación física correcta: error = 1/sqrt(weight))
+            valid_weight = weight_data > 0
+            error_map = np.full_like(weight_data, np.nan)
+            error_map[valid_weight] = 1.0 / np.sqrt(weight_data[valid_weight])
+            
+            # Manejar valores no finitos
+            if np.any(~np.isfinite(error_map)):
+                finite_errors = error_map[np.isfinite(error_map)]
+                if len(finite_errors) > 0:
+                    max_error = np.nanmax(finite_errors)
+                    error_map[~np.isfinite(error_map)] = max_error
+                    logging.warning("Replaced non-finite values in error map")
+                else:
+                    raise ValueError("No finite values in error map")
+            
+            logging.info(f"Successfully loaded weight map with {np.sum(valid_weight)} valid pixels")
+            return error_map
+            
+        except Exception as e:
+            logging.warning(f"Error loading weight map {weight_path}: {e}")
+            return None
+
+    def perform_photometry_with_aperture_correction(self, data, error_map, positions, 
+                                                   aperture_radius_px, annulus_inner_px, 
+                                                   annulus_outer_px, correction_factor):
+        """
+        Fotometría con errores calculados correctamente usando Photutils y weight maps.
         """
         try:
             # Crear aperturas
             apertures = CircularAperture(positions, r=aperture_radius_px)
             annulus = CircularAnnulus(positions, r_in=annulus_inner_px, r_out=annulus_outer_px)
             
-            # Áreas para cálculos
-            aperture_area = apertures.area
-            annulus_area = annulus.area
+            # Fotometría con propagación de errores usando el error_map
+            phot_table = aperture_photometry(data, apertures, error=error_map)
+            bkg_phot_table = aperture_photometry(data, annulus, error=error_map)
             
-            # Array de errores (dominado por ruido de fondo)
-            error_array = np.full_like(data, bkg_rms)
-            
-            # Fotometría con propagación de errores
-            phot_table = aperture_photometry(data, apertures, error=error_array)
-            bkg_phot_table = aperture_photometry(data, annulus, error=error_array)
-            
-            # Extraer valores
-            source_flux = phot_table['aperture_sum'].data
-            source_flux_err = phot_table['aperture_sum_err'].data
+            # Obtener flujos y errores calculados por Photutils
+            raw_flux = phot_table['aperture_sum'].data
+            raw_flux_err = phot_table['aperture_sum_err'].data
             bkg_flux = bkg_phot_table['aperture_sum'].data
             bkg_flux_err = bkg_phot_table['aperture_sum_err'].data
             
-            # Calcular fondo por pixel
-            bkg_per_pixel = bkg_flux / annulus_area
-            bkg_per_pixel_err = bkg_flux_err / annulus_area
+            # Calcular áreas
+            aperture_area = apertures.area
+            annulus_area = annulus.area
             
-            # Restar fondo
-            bkg_in_aperture = bkg_per_pixel * aperture_area
-            bkg_in_aperture_err = bkg_per_pixel_err * aperture_area
+            # Fondo medio por píxel y su error
+            bkg_mean = bkg_flux / annulus_area
+            bkg_mean_err = bkg_flux_err / annulus_area
             
-            net_flux = source_flux - bkg_in_aperture
-            net_flux_err = np.sqrt(source_flux_err**2 + bkg_in_aperture_err**2)
+            # Flujo neto (bruto - fondo) y su error (propagación cuadrática)
+            net_flux = raw_flux - bkg_mean * aperture_area
+            net_flux_err = np.sqrt(raw_flux_err**2 + (aperture_area * bkg_mean_err)**2)
             
-            # SNR
-            snr = np.where(net_flux_err > 0, net_flux / net_flux_err, 0.0)
+            # Aplicar corrección de apertura al flujo neto y su error
+            flux_corrected = net_flux * correction_factor
+            flux_err_corrected = net_flux_err * correction_factor
             
-            return net_flux, net_flux_err, snr, aperture_area
+            # Calcular SNR
+            snr = np.where(flux_err_corrected > 0, flux_corrected / flux_err_corrected, 0.0)
+            
+            return flux_corrected, flux_err_corrected, snr, aperture_area
             
         except Exception as e:
-            logging.warning(f"Advanced error propagation failed, using simple method: {e}")
-            # Fallback a método simple
-            return self._simple_photometry(data, positions, aperture_radius_px, 
-                                          annulus_inner_px, annulus_outer_px, bkg_rms)
+            logging.error(f"Error en fotometría con Photutils: {e}")
+            traceback.print_exc()
+            # Fallback simple en caso de error
+            return self._simple_photometry_fallback(data, positions, aperture_radius_px, 
+                                                  annulus_inner_px, annulus_outer_px, 
+                                                  correction_factor)
 
-    def _simple_photometry(self, data, positions, aperture_radius_px, annulus_inner_px, annulus_outer_px, bkg_rms):
-        """Método simple de fotometría (fallback)"""
-        apertures = CircularAperture(positions, r=aperture_radius_px)
-        annulus = CircularAnnulus(positions, r_in=annulus_inner_px, r_out=annulus_outer_px)
-        
-        phot_table = aperture_photometry(data, apertures)
-        bkg_phot_table = aperture_photometry(data, annulus)
-        
-        bkg_mean = bkg_phot_table['aperture_sum'] / annulus.area
-        net_flux = phot_table['aperture_sum'] - (bkg_mean * apertures.area)
-        
-        # Estimación simple de error
-        net_flux_err = np.sqrt(np.abs(net_flux) + (apertures.area * bkg_rms**2))
-        snr = np.where(net_flux_err > 0, net_flux / net_flux_err, 0.0)
-        
-        return net_flux, net_flux_err, snr, apertures.area
+    def _simple_photometry_fallback(self, data, positions, aperture_radius_px, 
+                                  annulus_inner_px, annulus_outer_px, correction_factor):
+        """Método de respaldo simple para casos de error"""
+        try:
+            apertures = CircularAperture(positions, r=aperture_radius_px)
+            annulus = CircularAnnulus(positions, r_in=annulus_inner_px, r_out=annulus_outer_px)
+            
+            # Fotometría básica sin errores detallados
+            phot_table = aperture_photometry(data, apertures)
+            bkg_phot_table = aperture_photometry(data, annulus)
+            
+            # Cálculo simple de fondo y flujo neto
+            bkg_mean = bkg_phot_table['aperture_sum'] / annulus.area
+            net_flux = phot_table['aperture_sum'] - bkg_mean * apertures.area
+            
+            # Aplicar corrección
+            flux_corrected = net_flux * correction_factor
+            
+            # Estimación simple de error (Poisson)
+            flux_err = np.sqrt(np.abs(net_flux)) * correction_factor
+            snr = np.where(flux_err > 0, flux_corrected / flux_err, 0.0)
+            
+            logging.warning("Using fallback photometry method (simple error estimation)")
+            return flux_corrected, flux_err, snr, apertures.area
+            
+        except Exception as e:
+            logging.error(f"Error in fallback photometry: {e}")
+            # Último recurso: retornar arrays de ceros
+            n_positions = len(positions)
+            return (np.zeros(n_positions), np.zeros(n_positions), 
+                    np.zeros(n_positions), apertures.area)
 
-    def calculate_magnitudes(self, flux, flux_err, zero_point):
+    def calculate_magnitudes_with_validation(self, flux, flux_err, zero_point, filter_name, aperture_size):
         """
-        Calcula magnitudes y errores de manera segura
+        Calcula magnitudes con validación adicional
         """
-        # Magnitudes
-        mag = np.where(flux > 0, zero_point - 2.5 * np.log10(flux), 99.0)
+        # Validar flujos antes de calcular magnitudes
+        valid_flux_mask = (flux > 0) & (flux < 1e6) & (flux_err > 0) & np.isfinite(flux) & np.isfinite(flux_err)
         
-        # Errores en magnitud
-        mag_err = np.where(flux > 0, (2.5 / np.log(10)) * (flux_err / flux), 99.0)
+        # Calcular magnitudes solo para flujos válidos
+        mag = np.where(valid_flux_mask, zero_point - 2.5 * np.log10(flux), 99.0)
+        mag_err = np.where(valid_flux_mask, (2.5 / np.log(10)) * (flux_err / flux), 99.0)
+        
+        # Verificar magnitudes razonables
+        reasonable_mag_range = (10.0, 30.0)
+        mag = np.where((mag >= reasonable_mag_range[0]) & (mag <= reasonable_mag_range[1]), mag, 99.0)
+        
+        # Log para diagnóstico
+        n_valid = np.sum(valid_flux_mask)
+        if n_valid > 0:
+            valid_mags = mag[valid_flux_mask]
+            mean_mag = np.mean(valid_mags)
+            std_mag = np.std(valid_mags)
+            logging.debug(f"{filter_name}_{aperture_size}: {n_valid} fuentes válidas, mag: {mean_mag:.2f} ± {std_mag:.2f}")
+        else:
+            logging.warning(f"{filter_name}_{aperture_size}: No hay fuentes con flujos válidos")
         
         return mag, mag_err
 
@@ -357,7 +498,7 @@ class SPLUSGCPhotometry:
             
             # Zoom alrededor de la fuente
             x, y = positions[idx]
-            size = 100  # píxeles alrededor de la fuente
+            size = 100
             y_min = max(0, int(y - size))
             y_max = min(data.shape[0], int(y + size))
             x_min = max(0, int(x - size))
@@ -380,6 +521,41 @@ class SPLUSGCPhotometry:
         except Exception as e:
             logging.warning(f"Could not save debug image: {e}")
 
+    def compare_with_taylor_catalog(self, results, field_name):
+        """
+        Compara resultados con el catálogo de Taylor para validación
+        """
+        try:
+            # Asumiendo que el catálogo original tiene magnitudes de Taylor
+            taylor_mag_columns = ['gmag', 'rmag', 'imag']
+            
+            for taylor_col in taylor_mag_columns:
+                if taylor_col in results.columns:
+                    # Comparar con magnitudes S-PLUS equivalentes
+                    splus_filter = self.get_splus_equivalent_filter(taylor_col)
+                    if splus_filter:
+                        mag_col = f'MAG_{splus_filter}_4'  # Usar apertura de 4 arcsec
+                        if mag_col in results.columns:
+                            # Filtrar fuentes válidas
+                            valid_mask = (results[mag_col] < 50) & (results[taylor_col] < 50)
+                            if np.sum(valid_mask) > 10:
+                                diff = results.loc[valid_mask, mag_col] - results.loc[valid_mask, taylor_col]
+                                mean_diff = diff.mean()
+                                std_diff = diff.std()
+                                logging.info(f"Comparación con Taylor {taylor_col}->{splus_filter}: Δmag = {mean_diff:.3f} ± {std_diff:.3f} (n={np.sum(valid_mask)})")
+            
+        except Exception as e:
+            logging.warning(f"Error en comparación con Taylor: {e}")
+
+    def get_splus_equivalent_filter(self, taylor_filter):
+        """Mapeo aproximado entre filtros Taylor y S-PLUS"""
+        mapping = {
+            'gmag': 'F515',
+            'rmag': 'F660', 
+            'imag': 'F861'
+        }
+        return mapping.get(taylor_filter, None)
+
     def process_field(self, field_name):
         """
         Procesa un campo completo de cúmulos globulares
@@ -397,7 +573,7 @@ class SPLUSGCPhotometry:
             logging.warning(f"Could not get field center for {field_name}. Skipping.")
             return None
         
-        # Cargar factores de aperture correction
+        # Cargar y VALIDAR factores de corrección
         aperture_corrections = self.load_aperture_correction_factors(field_name)
         
         # Filtrar fuentes en el campo
@@ -441,19 +617,37 @@ class SPLUSGCPhotometry:
                         logging.warning(f"No data found in {image_path}")
                         continue
                 
+                # Cargar y validar weight map
+                error_map = None
+                weight_path = self.find_weight_file(field_name, filter_name)
+                if weight_path:
+                    error_map = self.load_and_validate_weight_map(weight_path, data.shape)
+                
+                # Si no hay weight map válido, usar estimación basada en fondo
+                if error_map is None:
+                    logging.info(f"    Using background-based error estimation for {filter_name}")
+                    # Verificar y corregir fondo si es necesario
+                    needs_correction, original_std = self.check_splus_background_status(data, filter_name)
+                    if needs_correction:
+                        data_corrected, bkg_rms = self.apply_conservative_background_correction(data, filter_name)
+                    else:
+                        data_corrected, bkg_rms = data, original_std
+                    
+                    error_map = np.full_like(data_corrected, bkg_rms)
+                else:
+                    # Si tenemos weight map, solo corregir fondo pero mantener el error_map
+                    needs_correction, original_std = self.check_splus_background_status(data, filter_name)
+                    if needs_correction:
+                        data_corrected, _ = self.apply_conservative_background_correction(data, filter_name)
+                    else:
+                        data_corrected = data
+                
                 # Obtener WCS
                 try:
                     wcs = WCS(header)
                 except:
                     logging.warning(f"Could not create WCS for {image_path}")
                     wcs = None
-                
-                # Verificar y corregir fondo si es necesario
-                needs_correction, original_std = self.check_splus_background_status(data, filter_name)
-                if needs_correction:
-                    data_corrected, bkg_rms = self.apply_conservative_background_correction(data, filter_name)
-                else:
-                    data_corrected, bkg_rms = data, original_std
                 
                 # Convertir coordenadas a píxeles
                 ra_values = field_sources[self.ra_col].astype(float).values
@@ -471,7 +665,7 @@ class SPLUSGCPhotometry:
                 
                 # Filtrar posiciones válidas (lejos de bordes)
                 height, width = data_corrected.shape
-                margin = (max(self.apertures) / self.pixel_scale) * 2  # Margen conservador
+                margin = (max(self.apertures) / self.pixel_scale) * 2
                 
                 valid_mask = (
                     (x >= margin) & (x < width - margin) & 
@@ -503,18 +697,22 @@ class SPLUSGCPhotometry:
                     annulus_inner_px = (6 / 2) / self.pixel_scale
                     annulus_outer_px = (9 / 2) / self.pixel_scale
                     
-                    # Realizar fotometría
-                    flux, flux_err, snr, aperture_area = self.perform_photometry_with_error_propagation(
-                        data_corrected, valid_positions, aperture_radius_px,
-                        annulus_inner_px, annulus_outer_px, bkg_rms)
-                    
-                    # Aplicar aperture correction
+                    # Obtener factor de corrección
                     correction_factor = filter_corrections.get(aperture_size, 1.0)
-                    flux_corrected = flux * correction_factor
-                    flux_err_corrected = flux_err * correction_factor
                     
-                    # Calcular magnitudes
-                    mag, mag_err = self.calculate_magnitudes(flux_corrected, flux_err_corrected, zero_point)
+                    # Validar factor de corrección
+                    if correction_factor < 0.5 or correction_factor > 3.0:
+                        logging.warning(f"{filter_name}_{aperture_size}: Factor inválido {correction_factor:.3f}, usando 1.0")
+                        correction_factor = 1.0
+                    
+                    # Realizar fotometría con aplicación CORRECTA de la corrección
+                    flux_corrected, flux_err_corrected, snr, aperture_area = self.perform_photometry_with_aperture_correction(
+                        data_corrected, error_map, valid_positions, aperture_radius_px,
+                        annulus_inner_px, annulus_outer_px, correction_factor)
+                    
+                    # Calcular magnitudes con validación
+                    mag, mag_err = self.calculate_magnitudes_with_validation(
+                        flux_corrected, flux_err_corrected, zero_point, filter_name, aperture_size)
                     
                     # Guardar resultados para cada fuente válida
                     for i, idx in enumerate(valid_indices):
@@ -523,7 +721,6 @@ class SPLUSGCPhotometry:
                         
                         results.loc[source_idx, f'X_{prefix}'] = valid_positions[i, 0]
                         results.loc[source_idx, f'Y_{prefix}'] = valid_positions[i, 1]
-                        results.loc[source_idx, f'FLUX_RAW_{prefix}'] = flux[i]
                         results.loc[source_idx, f'FLUX_CORR_{prefix}'] = flux_corrected[i]
                         results.loc[source_idx, f'FLUXERR_{prefix}'] = flux_err_corrected[i]
                         results.loc[source_idx, f'MAG_{prefix}'] = mag[i]
@@ -531,7 +728,7 @@ class SPLUSGCPhotometry:
                         results.loc[source_idx, f'SNR_{prefix}'] = snr[i]
                         results.loc[source_idx, f'AP_CORR_{prefix}'] = correction_factor
                     
-                    # Imagen debug para una apertura específica
+                    # Imagen debug
                     if (self.debug and filter_name == self.debug_filter and 
                         aperture_size == 4 and len(valid_positions) > 0):
                         self.save_debug_image(data_corrected, valid_positions, 
@@ -543,6 +740,9 @@ class SPLUSGCPhotometry:
                 logging.error(f"Error processing {field_name} {filter_name}: {e}")
                 traceback.print_exc()
                 continue
+        
+        # Comparar con Taylor si está disponible
+        self.compare_with_taylor_catalog(results, field_name)
         
         return results
 
@@ -562,7 +762,7 @@ def main():
         exit(1)
     
     # Modo de operación
-    test_mode = True  # Cambiar a False para procesar todos los campos
+    test_mode = True
     test_field = 'CenA01'
     
     if test_mode:
@@ -574,7 +774,7 @@ def main():
     
     try:
         # Inicializar photometry
-        photometry = SPLUSGCPhotometry(
+        photometry = SPLUSGCPhotometryCorrected(
             catalog_path=catalog_path,
             zeropoints_file=zeropoints_file,
             debug=True,
@@ -611,9 +811,8 @@ def main():
                 for aperture_size in photometry.apertures:
                     prefix = f"{filter_name}_{aperture_size}"
                     
-                    # Columnas a rellenar
                     columns_to_fill = [
-                        f'FLUX_RAW_{prefix}', f'FLUX_CORR_{prefix}', f'FLUXERR_{prefix}',
+                        f'FLUX_CORR_{prefix}', f'FLUXERR_{prefix}',
                         f'MAG_{prefix}', f'MAGERR_{prefix}', f'SNR_{prefix}', f'AP_CORR_{prefix}'
                     ]
                     

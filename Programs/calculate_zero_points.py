@@ -19,13 +19,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 
 # Filter mapping between CSV columns and JSON keys
 filter_mapping = {
-    'mag_inst_corrected_F378': 'F0378',
-    'mag_inst_corrected_F395': 'F0395', 
-    'mag_inst_corrected_F410': 'F0410',
-    'mag_inst_corrected_F430': 'F0430',
-    'mag_inst_corrected_F515': 'F0515',
-    'mag_inst_corrected_F660': 'F0660',
-    'mag_inst_corrected_F861': 'F0861'
+    'mag_inst_uncorrected_F378': 'F0378',
+    'mag_inst_uncorrected_F395': 'F0395', 
+    'mag_inst_uncorrected_F410': 'F0410',
+    'mag_inst_uncorrected_F430': 'F0430',
+    'mag_inst_uncorrected_F515': 'F0515',
+    'mag_inst_uncorrected_F660': 'F0660',
+    'mag_inst_uncorrected_F861': 'F0861'
 }
 
 def calculate_zero_points(csv_file, json_dir):
@@ -232,7 +232,7 @@ def plot_zero_points(zero_points_data, field_name, all_zp_values):
     
     for i, (filt, data) in enumerate(zero_points_data.items()):
         if data is not None and len(all_zp_values[filt]) > 0:
-            filter_short = filt.replace('mag_inst_corrected', '')
+            filter_short = filt.replace('mag_inst_uncorrected', '')
             filters.append(filter_short)
             zp_medians.append(data['median'])
             zp_errors_mad.append(data['std_mad'])

@@ -22,7 +22,7 @@ logging.basicConfig(
     ]
 )
 
-def run_zero_point_calculation(csv_file, script_path='../Programs/ZeroPoints_calculations.py'):
+def run_zero_point_calculation(csv_file, script_path='../Programs/calculate_zero_points.py'):
     """
     Run zero point calculation for a single field with proper error handling
     """
@@ -107,8 +107,8 @@ def process_field_results(field_name):
                 continue
             
             # Extract filter name (e.g., 'F378' from 'mag_inst_corrected_F378')
-            if filter_name.startswith('mag_inst_corrected_'):
-                splus_col = filter_name.split('mag_inst_corrected_')[1]
+            if filter_name.startswith('mag_inst_uncorrected_'):
+                splus_col = filter_name.split('mag_inst_uncorrected_')[1]
                 splus_row[splus_col] = float(median_zp)
                 valid_filters += 1
             else:
