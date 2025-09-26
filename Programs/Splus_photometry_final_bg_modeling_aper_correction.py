@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Splus_photometry_final_bg_modeling_aper_correction.py - Fotometría de cúmulos globulares con aperture correction correcto
-Versión corregida: aplicación adecuada de la corrección de apertura y validación de errores.
-CON SOPORTE COMPLETO PARA WEIGHT MAPS Y ESTIMACIÓN PRECISA DE ERRORES.
+Splus_photometry_final_bg_modeling_aper_correction_CORREGIDO.py - Fotometría de cúmulos globulares con aperture correction correcto
+Versión corregida para trabajar con las nuevas magnitudes calibradas del script 1.
+CON SOPORTE COMPLETO PARA LAS NUEVAS MAGNITUDES CALIBRADAS Y FACTORES DE CORRECCIÓN.
 """
 
 import numpy as np
@@ -107,15 +107,29 @@ class SPLUSGCPhotometryCorrected:
 
     def load_aperture_correction_factors(self, field_name):
         """
-        Carga y VALIDA los factores de aperture correction
+        Carga y VALIDA los factores de aperture correction del archivo generado por el script 1
         """
         try:
+            # ✅ Asegurarse de que usa el archivo correcto
             ref_catalog_path = f"{field_name}_gaia_xp_matches_splus_method.csv"
+            logging.info(f"Buscando factores de aperture correction en: {ref_catalog_path}")
+            
             if not os.path.exists(ref_catalog_path):
-                logging.warning(f"Reference catalog not found: {ref_catalog_path}")
+                logging.error(f"❌ ARCHIVO NO ENCONTRADO: {ref_catalog_path}")
+                logging.error("❌ Ejecuta primero el Script 1 para generar los factores de corrección")
                 return self._get_default_corrections()
             
             ref_df = pd.read_csv(ref_catalog_path)
+            
+            # ✅ VERIFICAR que el archivo contiene las columnas correctas
+            sample_filter = self.filters[0]
+            sample_column = f'ap_corr_3_{sample_filter}'
+            
+            if sample_column not in ref_df.columns:
+                logging.error(f"❌ Columna {sample_column} no encontrada en {ref_catalog_path}")
+                logging.error("❌ El Script 1 no generó los factores correctamente")
+                return self._get_default_corrections()
+            
             corrections = {}
             
             for filter_name in self.filters:
@@ -126,7 +140,7 @@ class SPLUSGCPhotometryCorrected:
                         # Filtrar factores razonables
                         valid_factors = ref_df[
                             (ref_df[col_name] >= 0.5) & 
-                            (ref_df[col_name] <= 3.0)  # Rango más estricto
+                            (ref_df[col_name] <= 3.0)
                         ][col_name]
                         
                         if len(valid_factors) > 0:
@@ -143,12 +157,17 @@ class SPLUSGCPhotometryCorrected:
                 validated_factors = self.validate_aperture_correction_factors(filter_corrections, filter_name)
                 corrections[filter_name] = validated_factors
                 
-                logging.info(f"{filter_name}: Factores validados: {validated_factors}")
+                # ✅ VERIFICAR que los factores no sean 1.0 (indicaría problema)
+                if all(factor == 1.0 for factor in validated_factors.values()):
+                    logging.warning(f"⚠️  {filter_name}: Todos los factores son 1.0 - verificar Script 1")
+                else:
+                    logging.info(f"✅ {filter_name}: Factores validados: {validated_factors}")
             
             return corrections
             
         except Exception as e:
             logging.error(f"Error loading aperture corrections: {e}")
+            traceback.print_exc()
             return self._get_default_corrections()
     
     def _get_default_corrections(self):
@@ -156,6 +175,7 @@ class SPLUSGCPhotometryCorrected:
         default_corrections = {}
         for filter_name in self.filters:
             default_corrections[filter_name] = {ap: 1.0 for ap in self.apertures}
+        logging.warning("⚠️  Usando factores de corrección por defecto (1.0)")
         return default_corrections
 
     def check_splus_background_status(self, data, filter_name):
@@ -446,7 +466,7 @@ class SPLUSGCPhotometryCorrected:
 
     def calculate_magnitudes_with_validation(self, flux, flux_err, zero_point, filter_name, aperture_size):
         """
-        Calcula magnitudes con validación adicional
+        Calcula magnitudes con validación adicional - RANGO AJUSTADO para magnitudes calibradas
         """
         # Validar flujos antes de calcular magnitudes
         valid_flux_mask = (flux > 0) & (flux < 1e6) & (flux_err > 0) & np.isfinite(flux) & np.isfinite(flux_err)
@@ -455,8 +475,8 @@ class SPLUSGCPhotometryCorrected:
         mag = np.where(valid_flux_mask, zero_point - 2.5 * np.log10(flux), 99.0)
         mag_err = np.where(valid_flux_mask, (2.5 / np.log(10)) * (flux_err / flux), 99.0)
         
-        # Verificar magnitudes razonables
-        reasonable_mag_range = (10.0, 30.0)
+        # ✅ RANGO AJUSTADO: Ahora acepta magnitudes más brillantes (5-30) debido a la calibración
+        reasonable_mag_range = (5.0, 30.0)  # Antes era (10.0, 30.0)
         mag = np.where((mag >= reasonable_mag_range[0]) & (mag <= reasonable_mag_range[1]), mag, 99.0)
         
         # Log para diagnóstico
@@ -555,6 +575,30 @@ class SPLUSGCPhotometryCorrected:
             'imag': 'F861'
         }
         return mapping.get(taylor_filter, None)
+
+    def verify_photometry_coherence(self, field_name, filter_name, aperture_size, flux_values, mag_values, zero_point):
+        """
+        Verifica la coherencia entre flujos y magnitudes después de la calibración
+        """
+        try:
+            # Verificar que la conversión flujo→magnitud sea coherente
+            valid_mask = (flux_values > 0) & (mag_values < 50)
+            
+            if np.sum(valid_mask) > 10:
+                expected_mags = zero_point - 2.5 * np.log10(flux_values[valid_mask])
+                actual_mags = mag_values[valid_mask]
+                
+                differences = actual_mags - expected_mags
+                mean_diff = np.mean(differences)
+                std_diff = np.std(differences)
+                
+                if abs(mean_diff) > 0.1:  # Diferencia mayor a 0.1 mag
+                    logging.warning(f"{field_name} {filter_name}: Incoherencia en conversión flujo→mag: {mean_diff:.3f} ± {std_diff:.3f}")
+                else:
+                    logging.debug(f"{field_name} {filter_name}: Conversión coherente (±{std_diff:.3f} mag)")
+                    
+        except Exception as e:
+            logging.debug(f"Verificación de coherencia falló: {e}")
 
     def process_field(self, field_name):
         """
@@ -714,6 +758,10 @@ class SPLUSGCPhotometryCorrected:
                     mag, mag_err = self.calculate_magnitudes_with_validation(
                         flux_corrected, flux_err_corrected, zero_point, filter_name, aperture_size)
                     
+                    # Verificar coherencia
+                    self.verify_photometry_coherence(field_name, filter_name, aperture_size, 
+                                                   flux_corrected, mag, zero_point)
+                    
                     # Guardar resultados para cada fuente válida
                     for i, idx in enumerate(valid_indices):
                         source_idx = results.index[idx]
@@ -750,7 +798,8 @@ def main():
     """Función principal"""
     # Configuración
     catalog_path = '../TAP_1_J_MNRAS_3444_gc.csv'
-    zeropoints_file = 'Results/all_fields_zero_points_splus_format_splus_method.csv'
+    # ✅ Asegúrate de que esta ruta apunte a los NUEVOS zero points calculados
+    zeropoints_file = 'Results/all_fields_zero_points_splus_format.csv'
     
     # Verificar archivos de entrada
     if not os.path.exists(catalog_path):
@@ -759,6 +808,17 @@ def main():
     
     if not os.path.exists(zeropoints_file):
         logging.error(f"Zeropoints file {zeropoints_file} not found")
+        # Puede que necesites recalcular los zero points primero
+        logging.error("❌ Necesitas recalcular los zero points con las nuevas magnitudes del script 1")
+        logging.error("💡 Ejecuta: python ../Programs/ZeroPoints_calculations.py")
+        exit(1)
+    
+    # Verificar que los archivos de factores existen
+    test_field = 'CenA01'
+    factors_file = f"{test_field}_gaia_xp_matches_splus_method.csv"
+    if not os.path.exists(factors_file):
+        logging.error(f"❌ Archivo de factores no encontrado: {factors_file}")
+        logging.error("💡 Ejecuta primero el Script 1: python ../Programs/extract_splus_gaia_xp_corrected_final.py")
         exit(1)
     
     # Modo de operación
@@ -851,9 +911,12 @@ def main():
                             mean_ap_corr = valid_data[f'AP_CORR_{filter_name}_{aperture_size}'].mean()
                             n_valid = len(valid_data)
                             
+                            # ✅ Indicar si los factores de corrección se están aplicando
+                            ap_status = "✅" if mean_ap_corr != 1.0 else "❌"
+                            
                             logging.info(f"{filter_name}_{aperture_size}: {n_valid} valid, "
                                        f"Mean SNR: {mean_snr:.1f}, Mean Mag: {mean_mag:.2f}, "
-                                       f"Mean AP Corr: {mean_ap_corr:.3f}")
+                                       f"Mean AP Corr: {mean_ap_corr:.3f} {ap_status}")
         
         else:
             logging.error("No results were generated for any field")
