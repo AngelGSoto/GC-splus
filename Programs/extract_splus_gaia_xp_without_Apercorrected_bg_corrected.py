@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
-extract_splus_gaia_xp_final_practical.py
-VERSIÓN PRÁCTICA - Usa correcciones de apertura fijas basadas en S-PLUS
-- Evita el problema con growth curves en imágenes con flujos anómalos
-- Usa valores típicos de corrección de apertura para S-PLUS
-- Mantiene unsharp mask para Centaurus A
+extract_splus_gaia_xp_without_Apercorrected_bg_corrected.py
+VERSIÓN SIN CORRECCIONES DE APERTURA - COMPLETA
 """
 
 import os
@@ -27,41 +24,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 SPLUS_FILTERS = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
 APERTURE_DIAM = 3.0  # Apertura de 3" para fotometría
 
-def get_aperture_correction_fixed(filter_name, fwhm):
-    """
-    Correcciones REALISTAS basadas en caracterización S-PLUS
-    """
-    # Valores base de la pipeline S-PLUS para apertura de 3"
-    base_corrections = {
-        'F378': 0.15,  # Seeing típico ~2.0" en azul
-        'F395': 0.16,  
-        'F410': 0.17,  
-        'F430': 0.18,  
-        'F515': 0.20,  # Seeing ~1.8"
-        'F660': 0.22,  # Seeing ~1.5" 
-        'F861': 0.25   # Seeing ~1.3" - mejor seeing → más corrección
-    }
-    
-    # Ajuste por FWHM REAL (inverso a tu implementación actual)
-    # MEJOR seeing → MÁS luz fuera de apertura → MÁS corrección
-    if fwhm < 1.2:
-        # Seeing excelente (raro en S-PLUS)
-        correction = base_corrections[filter_name] + 0.10
-    elif fwhm < 1.6:
-        # Seeing muy bueno (típico en rojo)
-        correction = base_corrections[filter_name] + 0.05
-    elif fwhm < 2.0:
-        # Seeing típico de S-PLUS
-        correction = base_corrections[filter_name]
-    else:
-        # Seeing pobre (típico en azul)
-        correction = base_corrections[filter_name] - 0.05
-    
-    # Limitar a rango físico
-    correction = max(0.08, min(0.40, correction))
-    
-    logging.info(f"{filter_name}: FWHM={fwhm:.2f}\", Corrección realista = {correction:.3f} mag")
-    return correction
+# ========== FUNCIONES AUXILIARES ==========
 
 def find_valid_image_hdu(fits_file):
     """Encuentra el HDU válido en el archivo FITS"""
@@ -126,112 +89,111 @@ def find_image_file(field_dir, field_name, filter_name):
             return path
     return None
 
-def analyze_image_header(header, filter_name):
-    """Analiza el header SPLUS para información de diagnóstico"""
-    exptime = header.get('EFECTIME', header.get('EXPTIME', 1.0))
-    if exptime <= 0:
-        exptime = 1.0
-        logging.warning(f"{filter_name}: EXPTIME inválido, usando 1.0")
-    
-    pixscale = header.get('PIXSCALE', 0.55)
-    fwhm = header.get('FWHMMEAN', 1.5)
-    
-    logging.info(f"{filter_name}: EXPTIME={exptime:.1f}s, PIXSCALE={pixscale:.2f}\", FWHM={fwhm:.2f}\"")
-    
-    return {
-        'exptime': exptime,
-        'pixscale': pixscale,
-        'fwhm': fwhm
-    }
 
 def detect_galaxy_structure(data, filter_name):
     """
-    Detecta si hay estructura galáctica significativa en la imagen
-    Versión simplificada
+    Versión mejorada para detectar estructura galáctica residual
     """
     try:
-        # Estadísticas básicas
-        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
+        from photutils.background import Background2D, MedianBackground
+        from astropy.stats import SigmaClip
         
-        # Para Centaurus A, buscamos gradientes
-        height, width = data.shape
-        y, x = np.ogrid[:height, :width]
-        center_y, center_x = height // 2, width // 2
+        # Usar Background2D para modelar variaciones a gran escala
+        sigma_clip = SigmaClip(sigma=3.0)
+        bkg_estimator = MedianBackground()
         
-        # Calcular perfil radial simple
-        r = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-        max_r = min(center_x, center_y)
+        # Box size más pequeño para capturar estructura galáctica
+        box_size = (100, 100)  # píxeles
+        bkg = Background2D(data, box_size, 
+                          filter_size=(3, 3),
+                          sigma_clip=sigma_clip, 
+                          bkg_estimator=bkg_estimator)
         
-        radial_bins = np.linspace(0, max_r, 20)
-        radial_profile = []
+        # Calcular residuos estructurados
+        residual = data - bkg.background
+        residual_std = np.std(residual)
         
-        for i in range(len(radial_bins) - 1):
-            mask = (r >= radial_bins[i]) & (r < radial_bins[i+1])
-            if np.sum(mask) > 100:
-                radial_profile.append(np.median(data[mask]))
-            else:
-                radial_profile.append(0.0)
+        # Umbral más conservador para detección
+        has_significant_structure = np.max(np.abs(residual)) > 5 * residual_std
         
-        radial_profile = np.array(radial_profile)
-        
-        if len(radial_profile) > 5:
-            center_brightness = np.mean(radial_profile[:5])
-            outer_brightness = np.mean(radial_profile[-5:])
-            brightness_gradient = center_brightness - outer_brightness
+        if has_significant_structure:
+            # Encontrar centro de la estructura máxima
+            height, width = data.shape
+            y, x = np.ogrid[:height, :width]
             
-            # Criterio simple para estructura galáctica
-            has_structure = brightness_gradient > 2 * std
+            # Usar el pico de residuo para centrar
+            max_residual_pos = np.unravel_index(np.argmax(np.abs(residual)), data.shape)
+            center_y, center_x = max_residual_pos
             
-            if has_structure:
-                logging.info(f"{filter_name}: Estructura galáctica detectada (gradiente: {brightness_gradient:.6f})")
-                return True, center_x, center_y, max_r * 0.7
+            # Radio estimado basado en la extensión de residuos significativos
+            significant_mask = np.abs(residual) > 3 * residual_std
+            if np.any(significant_mask):
+                y_pos, x_pos = np.where(significant_mask)
+                distances = np.sqrt((x_pos - center_x)**2 + (y_pos - center_y)**2)
+                structure_radius = np.percentile(distances, 90)  # 90th percentile
             else:
-                logging.info(f"{filter_name}: Sin estructura galáctica significativa")
-                return False, center_x, center_y, 0
+                structure_radius = min(center_x, center_y, 
+                                     width - center_x, height - center_y) * 0.7
+            
+            logging.info(f"{filter_name}: Estructura significativa detectada - centro ({center_x:.1f}, {center_y:.1f}), radio {structure_radius:.1f} pix")
+            return True, center_x, center_y, structure_radius
         else:
+            logging.info(f"{filter_name}: Sin estructura residual significativa")
             return False, data.shape[1] // 2, data.shape[0] // 2, 0
             
     except Exception as e:
-        logging.warning(f"Error detectando estructura galáctica: {e}")
+        logging.warning(f"Error en detección mejorada: {e}")
         return False, data.shape[1] // 2, data.shape[0] // 2, 0
 
 def apply_unsharp_mask_selective(data, positions, center_x, center_y, structure_radius, filter_name):
     """
-    Aplica unsharp masking solo a estrellas cerca de la estructura galáctica
+    Versión más conservadora del unsharp mask
     """
     try:
-        # Calcular distancias de cada estrella al centro de la estructura
+        # Calcular distancias al centro de estructura
         distances = np.sqrt((positions[:, 0] - center_x)**2 + (positions[:, 1] - center_y)**2)
         
-        # Identificar estrellas dentro del área de influencia
-        near_structure = distances < structure_radius
+        # Solo estrellas dentro del radio de estructura + margen
+        margin = 50  # píxeles de margen
+        near_structure = distances < (structure_radius + margin)
         n_near = np.sum(near_structure)
         
         if n_near == 0:
-            logging.info(f"{filter_name}: No hay estrellas cerca de la estructura, sin unsharp mask")
             return data, False
         
-        logging.info(f"{filter_name}: Aplicando unsharp mask a {n_near} estrellas cerca de estructura galáctica")
+        logging.info(f"{filter_name}: Aplicando unsharp mask conservador a {n_near}/{len(positions)} estrellas")
         
-        # Aplicar unsharp mask
+        # Parámetros más conservadores
         data_clean = data.copy()
         data_clean = np.nan_to_num(data_clean, nan=0.0, posinf=0.0, neginf=0.0)
         
-        sigma = max(15.0, structure_radius / 20.0)
+        # Sigma más pequeño para preservar estructuras estelares
+        sigma = max(8.0, structure_radius / 30.0)  # Más conservador
         smoothed = gaussian_filter(data_clean, sigma=sigma)
-        data_unsharp = data_clean - 0.7 * smoothed
         
-        logging.info(f"{filter_name}: Unsharp mask aplicado (sigma={sigma:.1f})")
+        # Sustracción más suave
+        data_unsharp = data_clean - 0.3 * smoothed  # Reducido de 0.7 a 0.3
         
-        return data_unsharp, True
+        # Aplicar solo en regiones cerca de estructura galáctica
+        mask = np.zeros_like(data, dtype=bool)
+        y_idx, x_idx = np.ogrid[:data.shape[0], :data.shape[1]]
+        structure_mask = (x_idx - center_x)**2 + (y_idx - center_y)**2 < (structure_radius + margin)**2
+        
+        result = data.copy()
+        result[structure_mask] = data_unsharp[structure_mask]
+        
+        logging.info(f"{filter_name}: Unsharp mask aplicado (sigma={sigma:.1f}, factor=0.3)")
+        return result, True
         
     except Exception as e:
-        logging.error(f"Error aplicando unsharp mask selectivo: {e}")
+        logging.error(f"Error en unsharp mask conservador: {e}")
         return data, False
 
-def extract_instrumental_mags_practical(image_path, positions, ref_catalog, field_name, filter_name):
+# ========== FUNCIÓN PRINCIPAL MODIFICADA ==========
+
+def extract_instrumental_mags_no_aper_corr(image_path, positions, ref_catalog, field_name, filter_name):
     """
-    Extrae magnitudes instrumentales con correcciones de apertura fijas
+    Extrae magnitudes instrumentales SIN correcciones de apertura
     """
     try:
         hdu, _, wcs = find_valid_image_hdu(image_path)
@@ -242,19 +204,21 @@ def extract_instrumental_mags_practical(image_path, positions, ref_catalog, fiel
         header = hdu.header
         
         # Analizar header para diagnóstico
-        header_info = analyze_image_header(header, filter_name)
-        pixscale = header_info['pixscale']
-        exptime = header_info['exptime']
-        fwhm = header_info['fwhm']
+        exptime = header.get('EFECTIME', header.get('EXPTIME', 1.0))
+        if exptime <= 0:
+            exptime = 1.0
+        pixscale = header.get('PIXSCALE', 0.55)
+        
+        logging.info(f"{filter_name}: EXPTIME={exptime:.1f}s, PIXSCALE={pixscale:.2f}\"")
         
         # Estadísticas de la imagen
         mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=3.0)
         logging.info(f"{filter_name}: Estadísticas - Media={mean_val:.6f}, Mediana={median_val:.6f}, Std={std_val:.6f} ADU")
         
-        # Paso 1: Detectar estructura galáctica
+        # Detectar estructura galáctica
         has_structure, center_x, center_y, structure_radius = detect_galaxy_structure(data, filter_name)
         
-        # Paso 2: Aplicar unsharp mask selectivo si hay estructura
+        # Aplicar unsharp mask selectivo si hay estructura
         used_unsharp = False
         if has_structure and structure_radius > 0:
             data_processed, used_unsharp = apply_unsharp_mask_selective(
@@ -263,10 +227,10 @@ def extract_instrumental_mags_practical(image_path, positions, ref_catalog, fiel
         else:
             data_processed = data.copy()
         
-        # Paso 3: Obtener corrección de apertura FIJA (no growth curves)
-        aperture_correction = get_aperture_correction_fixed(filter_name, fwhm)
+        # ✅ MODIFICACIÓN CRÍTICA: SIN CORRECCIÓN DE APERTURA
+        aperture_correction = 0.0  # No aplicar corrección
         
-        # Paso 4: Fotometría en apertura de 3"
+        # Fotometría en apertura de 3"
         aperture_radius = (APERTURE_DIAM / 2.0) / pixscale
         aperture = CircularAperture(positions, r=aperture_radius)
         
@@ -277,9 +241,9 @@ def extract_instrumental_mags_practical(image_path, positions, ref_catalog, fiel
         # Estimación de error
         flux_err_adus = np.sqrt(np.abs(flux_adus) + 0.1)
         
-        # ✅ Fórmula CORRECTA: minstr = −2.5 log10(flux_adus) + ACm
+        # ✅ Fórmula SIN corrección de apertura: minstr = −2.5 log10(flux_adus)
         min_flux = 1e-10
-        mag_inst = -2.5 * np.log10(np.maximum(flux_adus, min_flux)) + aperture_correction
+        mag_inst = -2.5 * np.log10(np.maximum(flux_adus, min_flux))
         
         # Calcular errores
         mag_err = (2.5 / np.log(10)) * (flux_err_adus / np.maximum(flux_adus, min_flux))
@@ -292,15 +256,14 @@ def extract_instrumental_mags_practical(image_path, positions, ref_catalog, fiel
             # Flujos en ADUs
             f'flux_adus_3.0_{filter_name}': flux_adus,
             f'flux_err_adus_3.0_{filter_name}': flux_err_adus,
-            # Magnitudes instrumentales CORREGIDAS
+            # Magnitudes instrumentales SIN CORREGIR
             f'mag_inst_3.0_{filter_name}': mag_inst,
             f'mag_inst_total_{filter_name}': mag_inst,
             f'mag_err_3.0_{filter_name}': mag_err,
             f'snr_3.0_{filter_name}': snr,
-            f'aper_corr_3.0_{filter_name}': aperture_correction,
+            f'aper_corr_3.0_{filter_name}': aperture_correction,  # Siempre 0.0
             f'pixscale_{filter_name}': pixscale,
             f'exptime_{filter_name}': exptime,
-            f'fwhm_{filter_name}': fwhm,
             f'has_galaxy_structure_{filter_name}': has_structure,
             f'used_unsharp_{filter_name}': used_unsharp,
         }
@@ -335,16 +298,15 @@ def extract_instrumental_mags_practical(image_path, positions, ref_catalog, fiel
         traceback.print_exc()
         return pd.DataFrame()
 
-def process_field_practical(field_name):
-    """Procesa un campo con correcciones de apertura fijas"""
+def process_field_no_aper_corr(field_name):
+    """Procesa un campo SIN correcciones de apertura"""
     logging.info(f"\n{'='*60}")
-    logging.info(f"PROCESANDO {field_name} (CORRECCIONES FIJAS)")
-    logging.info(f"Usa valores típicos de S-PLUS para corrección de apertura")
+    logging.info(f"PROCESANDO {field_name} (SIN CORRECCIONES DE APERTURA)")
     logging.info(f"{'='*60}")
     
     field_dir = field_name
     input_catalog = f'{field_name}_gaia_xp_matches.csv'
-    output_catalog = f'{field_name}_gaia_xp_matches_splus_practical.csv'
+    output_catalog = f'{field_name}_gaia_xp_matches_no_aper_corr.csv'
     
     if not os.path.exists(input_catalog):
         logging.error(f"Catálogo no encontrado: {input_catalog}")
@@ -372,7 +334,7 @@ def process_field_practical(field_name):
             continue
             
         logging.info(f"Procesando {band}...")
-        df = extract_instrumental_mags_practical(img, positions, ref_catalog, field_name, band)
+        df = extract_instrumental_mags_no_aper_corr(img, positions, ref_catalog, field_name, band)
         if not df.empty:
             all_results[band] = df
     
@@ -390,10 +352,10 @@ def process_field_practical(field_name):
     
     # Guardar resultados
     combined.to_csv(output_catalog, index=False)
-    logging.info(f"✅ Resultados guardados en: {output_catalog}")
+    logging.info(f"✅ Resultados SIN correcciones de apertura guardados en: {output_catalog}")
     
     # Estadísticas finales
-    logging.info("ESTADÍSTICAS FINALES (Correcciones Fijas):")
+    logging.info("ESTADÍSTICAS FINALES (SIN CORRECCIONES DE APERTURA):")
     for band in SPLUS_FILTERS:
         mag_col = f'mag_inst_total_{band}'
         if mag_col in combined.columns:
@@ -402,9 +364,8 @@ def process_field_practical(field_name):
                 min_mag = mags.min()
                 max_mag = mags.max()
                 median_mag = mags.median()
-                aper_corr = combined[f'aper_corr_3.0_{band}'].iloc[0] if f'aper_corr_3.0_{band}' in combined.columns else 0.0
                 
-                logging.info(f"{band}: [{min_mag:.2f}, {max_mag:.2f}], mediana={median_mag:.2f}, AP corr: {aper_corr:.3f}")
+                logging.info(f"{band}: [{min_mag:.2f}, {max_mag:.2f}], mediana={median_mag:.2f}")
     
     return True
 
@@ -414,15 +375,14 @@ def main():
     
     successful_fields = []
     for field in test_fields:
-        if process_field_practical(field):
+        if process_field_no_aper_corr(field):
             successful_fields.append(field)
     
     logging.info(f"\n{'='*60}")
-    logging.info(f"PROCESAMIENTO COMPLETADO - CORRECCIONES FIJAS")
-    logging.info(f"✅ Correcciones de apertura basadas en valores típicos S-PLUS")
-    logging.info(f"✅ Ajustadas por seeing (FWHM)")
-    logging.info(f"✅ Unsharp mask para estructuras galácticas")
-    logging.info(f"✅ SIN problemas de growth curves")
+    logging.info(f"PROCESAMIENTO COMPLETADO - SIN CORRECCIONES DE APERTURA")
+    logging.info(f"✅ Magnitudes instrumentales puras (sin correcciones)")
+    logging.info(f"✅ Unsharp mask para estructuras galácticas se mantiene")
+    logging.info(f"✅ SIN problemas de correcciones de apertura sobreestimadas")
     logging.info(f"Campos exitosos: {successful_fields}")
     logging.info(f"{'='*60}")
 

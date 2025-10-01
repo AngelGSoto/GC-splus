@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-Simple batch zero point calculation for SPLUS fields
-Direct processing without external scripts - CORRECTED VERSION
+ZeroPoints_calculations_NO_APER_CORR.py
+VERSIÓN para archivos SIN CORRECCIONES DE APERTURA
 """
+
 import pandas as pd
 import numpy as np
 import json
@@ -12,346 +13,338 @@ import logging
 from pathlib import Path
 from astropy.stats import sigma_clipped_stats
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('zero_points_batch_simple_corrected.log')
-    ]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
-# CORRECCIÓN: Los filtros en los JSON tienen formato F0378, F0395, etc.
-SPLUS_FILTERS_JSON = ['F0378', 'F0395', 'F0410', 'F0430', 'F0515', 'F0660', 'F0861']
-# Las columnas en el CSV tienen formato F378, F395, etc.
-SPLUS_FILTERS_CSV = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
+SPLUS_FILTERS = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
 
-# Mapeo entre nombres de filtros en JSON y CSV
-FILTER_MAPPING = {
-    'F0378': 'F378',
-    'F0395': 'F395', 
-    'F0410': 'F410',
-    'F0430': 'F430',
-    'F0515': 'F515',
-    'F0660': 'F660',
-    'F0861': 'F861'
+# ✅ MAPEO CRÍTICO: Filtros CSV -> Filtros JSON
+FILTER_MAP_CSV_TO_JSON = {
+    'F378': 'F0378',
+    'F395': 'F0395', 
+    'F410': 'F0410',
+    'F430': 'F0430',
+    'F515': 'F0515', 
+    'F660': 'F0660',
+    'F861': 'F0861'
 }
 
-INST_MAG_COLS = [f'mag_inst_calibrated_{filt}' for filt in SPLUS_FILTERS_CSV]
-
-def safe_convert_source_id(source_id_value):
-    """Convertir source_id de notación científica a entero"""
-    try:
-        if pd.isna(source_id_value):
-            return None
-        
-        source_id_str = str(source_id_value).strip()
-        
-        if 'E+' in source_id_str.upper() or 'E-' in source_id_str.upper():
-            source_id_float = float(source_id_str)
-            return str(int(source_id_float))
-        else:
-            return str(int(float(source_id_str)))
-    except (ValueError, TypeError):
-        return None
-
 def find_json_file(field_name, source_id):
-    """Encontrar archivo JSON con magnitudes sintéticas"""
+    """Buscar archivo JSON - COMPATIBLE CON FORMATO REAL"""
     json_dir = f"gaia_spectra_{field_name}"
     
     if not os.path.exists(json_dir):
         logging.warning(f"JSON directory not found: {json_dir}")
         return None
     
-    # Patrones de nombres posibles
+    # ✅ PATRONES basados en estructura real
     patterns = [
         f"{json_dir}/gaia_xp_spectrum_{source_id}-Ref-SPLUS21-magnitude.json",
-        f"{json_dir}/gaia_xp_spectrum_{source_id}-SPLUS21-magnitude.json",
-        f"{json_dir}/{source_id}-Ref-SPLUS21-magnitude.json"
+        f"{json_dir}/gaia_xp_spectrum_{source_id}-Ref.json",
+        f"{json_dir}/{source_id}-Ref-SPLUS21-magnitude.json",
     ]
     
     for pattern in patterns:
         if os.path.exists(pattern):
-            logging.debug(f"Found JSON file: {pattern}")
+            logging.debug(f"JSON encontrado: {pattern}")
             return pattern
     
-    logging.debug(f"JSON file not found for source_id {source_id} in {json_dir}")
+    # ✅ Búsqueda flexible
+    json_pattern = f"{json_dir}/*{source_id}*.json"
+    matches = glob.glob(json_pattern)
+    if matches:
+        logging.debug(f"JSON encontrado por patrón: {matches[0]}")
+        return matches[0]
+    
+    logging.debug(f"JSON NO encontrado para source_id: {source_id}")
     return None
 
-def calculate_field_zero_points(csv_file):
-    """Calcular zero points para un campo específico"""
-    field_name = Path(csv_file).stem.replace('_gaia_xp_matches_splus_method', '')
-    logging.info(f"Processing field: {field_name}")
+def calculate_zero_points_no_aper_corr(csv_file):
+    """Calcula zero-points para archivos SIN correcciones de apertura"""
+    # ✅ EXTRAER NOMBRE DEL CAMPO del nuevo formato de archivo
+    filename = Path(csv_file).stem
+    
+    if '_gaia_xp_matches_3arcsec' in filename:
+        field_name = filename.replace('_gaia_xp_matches_3arcsec', '')
+    else:
+        field_name = filename.replace('_gaia_xp_matches', '').replace('_splus', '')
+    
+    logging.info(f"🎯 PROCESANDO {field_name} desde {csv_file} (SIN CORRECCIONES APERTURA)")
     
     try:
-        # Leer datos instrumentales
-        df = pd.read_csv(csv_file)
-        logging.info(f"Loaded {len(df)} stars from {csv_file}")
-        
-        # Verificar que tenemos las columnas necesarias
-        missing_cols = [col for col in INST_MAG_COLS if col not in df.columns]
-        if missing_cols:
-            logging.warning(f"Missing columns: {missing_cols}")
-        
-        available_cols = [col for col in INST_MAG_COLS if col in df.columns]
-        
-        if not available_cols:
-            logging.error(f"No instrumental magnitude columns found")
-            return None, None
-            
+        # ✅ Leer CSV
+        df = pd.read_csv(csv_file, dtype={'source_id': str})
+        if 'source_id' in df.columns:
+            df['source_id'] = df['source_id'].astype(str).str.strip()
     except Exception as e:
-        logging.error(f"Error reading {csv_file}: {e}")
-        return None, None
+        logging.error(f"❌ Error leyendo {csv_file}: {e}")
+        return field_name, None
     
-    # Inicializar almacenamiento de zero points
-    zp_data = {filt: [] for filt in SPLUS_FILTERS_CSV}
-    valid_stars = 0
-    json_files_found = 0
-    json_files_processed = 0
+    # ✅ VERIFICAR COLUMNAS DISPONIBLES
+    all_columns = df.columns.tolist()
+    logging.info(f"📊 Columnas disponibles en CSV: {len(all_columns)}")
     
-    # Procesar cada estrella
+    # ✅ IDENTIFICAR COLUMNAS DE MAGNITUD DEL NUEVO SCRIPT 1
+    available_mag_columns = {}
+    for filt in SPLUS_FILTERS:
+        mag_col = f'mag_inst_3.0_{filt}'
+        if mag_col in df.columns:
+            available_mag_columns[filt] = mag_col
+            logging.info(f"✅ {filt}: Columna '{mag_col}' encontrada")
+            
+            # ✅ VERIFICAR VALORES DE CORRECCIÓN DE APERTURA (deberían ser 0.0)
+            ac_col = f'aper_corr_3.0_{filt}'
+            if ac_col in df.columns:
+                unique_ac = df[ac_col].unique()
+                if len(unique_ac) == 1 and unique_ac[0] == 0.0:
+                    logging.info(f"✅ {filt}: Correcciones de apertura = 0.0 (correcto)")
+                else:
+                    logging.warning(f"⚠️ {filt}: Correcciones de apertura no son 0.0: {unique_ac}")
+        else:
+            logging.warning(f"⚠️ {filt}: Columna '{mag_col}' NO encontrada")
+    
+    if len(available_mag_columns) < 3:
+        logging.error(f"❌ Solo {len(available_mag_columns)} filtros tienen datos")
+        return field_name, None
+    
+    # ✅ IDENTIFICAR COLUMNA DE ID
+    id_column = 'source_id' if 'source_id' in df.columns else None
+    if not id_column:
+        logging.error(f"❌ Columna 'source_id' no encontrada")
+        return field_name, None
+    
+    logging.info(f"✅ Usando columna de ID: {id_column}")
+    
+    # ✅ PROCESAR CADA ESTRELLA
+    zp_data = {filt: [] for filt in SPLUS_FILTERS}
+    stats = {
+        'total_stars': len(df),
+        'stars_with_json': 0,
+        'stars_with_photometry': 0,
+        'json_not_found': 0,
+        'json_errors': 0
+    }
+    
+    # ✅ EJEMPLOS PARA DIAGNÓSTICO
+    example_count = 0
+    example_data = []
+    
     for idx, row in df.iterrows():
-        if idx % 100 == 0 and idx > 0:
-            logging.info(f"  Processing star {idx}/{len(df)}")
+        source_id = str(row[id_column]).strip()
         
-        # Obtener source_id
-        source_id = None
-        if 'source_id' in row and pd.notna(row['source_id']):
-            source_id = safe_convert_source_id(row['source_id'])
-        
-        if not source_id:
+        if not source_id or source_id in ['nan', 'None', '']:
             continue
         
-        # Encontrar archivo JSON
+        # Buscar archivo JSON
         json_file = find_json_file(field_name, source_id)
         if not json_file:
+            stats['json_not_found'] += 1
             continue
         
-        json_files_found += 1
-        
-        # Leer magnitudes sintéticas
         try:
             with open(json_file, 'r') as f:
                 synth_data = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            logging.debug(f"Error reading {json_file}: {e}")
+            stats['stars_with_json'] += 1
+                
+        except Exception as e:
+            stats['json_errors'] += 1
             continue
         
-        json_files_processed += 1
-        
-        # Calcular zero points para cada filtro disponible
-        filters_processed = 0
-        for inst_col in available_cols:
-            # Extraer nombre del filtro del CSV (ej: 'F378' de 'mag_inst_calibrated_F378')
-            filt_csv = inst_col.replace('mag_inst_calibrated_', '')
+        # ✅ PROCESAR CADA FILTRO
+        for filt in SPLUS_FILTERS:
+            if filt not in available_mag_columns:
+                continue
+                
+            mag_col = available_mag_columns[filt]
+            inst_mag = row[mag_col]
             
-            # Obtener el nombre correspondiente en el JSON
-            filt_json = None
-            for json_filt, csv_filt in FILTER_MAPPING.items():
-                if csv_filt == filt_csv:
-                    filt_json = json_filt
-                    break
-            
-            if not filt_json:
+            if pd.isna(inst_mag):
                 continue
             
-            # Obtener magnitud instrumental
-            inst_mag = row[inst_col]
-            if pd.isna(inst_mag) or abs(inst_mag) >= 50.0:
+            # ✅ CLAVE EN JSON - USAR MAPEO CORRECTO
+            json_key = FILTER_MAP_CSV_TO_JSON[filt]
+            
+            if json_key not in synth_data:
+                # Intentar alternativas
+                json_key_alt = filt  # Por si acaso usa el mismo nombre
+                if json_key_alt not in synth_data:
+                    continue
+                json_key = json_key_alt
+            
+            synth_mag = synth_data[json_key]
+            
+            if synth_mag is None:
                 continue
             
-            # Obtener magnitud sintética del JSON
-            synth_mag = synth_data.get(filt_json)
-            if synth_mag is None or pd.isna(synth_mag) or abs(synth_mag) >= 50.0:
-                continue
-            
-            # Calcular zero point
+            # ✅ CÁLCULO DE ZERO POINT
             zp = synth_mag - inst_mag
             
-            # Filtrar valores razonables
-            if 5.0 < zp < 30.0:  # Rango ampliado para S-PLUS
-                zp_data[filt_csv].append(zp)
-                filters_processed += 1
-                logging.debug(f"  {filt_csv}: synth={synth_mag:.3f}, inst={inst_mag:.3f}, zp={zp:.3f}")
-        
-        if filters_processed > 0:
-            valid_stars += 1
+            # ✅ FILTRO FÍSICO (zero points típicos para S-PLUS SIN correcciones)
+            # SIN correcciones, los zero points deberían ser MÁS ALTOS
+            if np.isfinite(zp) and 15 < zp < 30:  # Rango típico para S-PLUS
+                zp_data[filt].append(zp)
+                
+                # ✅ GUARDAR EJEMPLOS PARA DIAGNÓSTICO
+                if example_count < 3:
+                    example_data.append({
+                        'source_id': source_id,
+                        'filter': filt,
+                        'inst_mag': inst_mag,
+                        'synth_mag': synth_mag,
+                        'zp': zp
+                    })
+                    example_count += 1
     
-    logging.info(f"Field {field_name}: {json_files_found} JSON found, {json_files_processed} processed, {valid_stars} valid stars")
+    # ✅ REPORTAR EJEMPLOS DE VERIFICACIÓN
+    if example_data:
+        logging.info("🔍 EJEMPLOS DE CÁLCULO (SIN CORRECCIONES APERTURA):")
+        for example in example_data:
+            logging.info(f"  Source: {example['source_id']}, {example['filter']}: "
+                        f"inst={example['inst_mag']:.3f}, synth={example['synth_mag']:.3f}, ZP={example['zp']:.3f}")
     
-    # Calcular estadísticas para cada filtro
+    # ✅ ESTADÍSTICAS FINALES
+    logging.info(f"📊 ESTADÍSTICAS {field_name}:")
+    logging.info(f"  Estrellas totales: {stats['total_stars']}")
+    logging.info(f"  Con JSON encontrado: {stats['stars_with_json']}")
+    logging.info(f"  JSON no encontrado: {stats['json_not_found']}")
+    logging.info(f"  Errores JSON: {stats['json_errors']}")
+    
+    # ✅ CALCULAR ZERO POINTS POR FILTRO
     zp_stats = {}
-    for filt in SPLUS_FILTERS_CSV:
-        zps = zp_data[filt]
+    for filt in SPLUS_FILTERS:
+        zps = np.array(zp_data[filt])
         
-        if len(zps) > 0:
-            zps_array = np.array(zps)
-            
-            # Estadísticas básicas
-            median_zp = np.median(zps_array)
-            mean_zp = np.mean(zps_array)
-            std_zp = np.std(zps_array)
-            mad = np.median(np.abs(zps_array - median_zp))
-            std_mad = 1.4826 * mad
-            
-            # Estadísticas con sigma clipping
-            if len(zps) > 5:
-                mean_clipped, median_clipped, std_clipped = sigma_clipped_stats(zps_array, sigma=3.0)
-            else:
-                mean_clipped, median_clipped, std_clipped = mean_zp, median_zp, std_zp
+        if len(zps) >= 5:
+            try:
+                mean, median, std = sigma_clipped_stats(zps, sigma=2.5)
+            except:
+                mean, median, std = np.mean(zps), np.median(zps), np.std(zps)
             
             zp_stats[filt] = {
-                'median': median_zp,
-                'mean': mean_zp,
-                'std': std_zp,
-                'mad': mad,
-                'std_mad': std_mad,
-                'mean_clipped': mean_clipped,
-                'median_clipped': median_clipped,
-                'std_clipped': std_clipped,
-                'n_stars': len(zps),
-                'min': np.min(zps_array),
-                'max': np.max(zps_array),
-                'q25': np.percentile(zps_array, 25) if len(zps) >= 4 else np.nan,
-                'q75': np.percentile(zps_array, 75) if len(zps) >= 4 else np.nan
+                'mean': float(mean),
+                'median': float(median), 
+                'std': float(std),
+                'n_stars': int(len(zps)),
+                'min': float(np.min(zps)),
+                'max': float(np.max(zps))
             }
             
-            status = "OK" if len(zps) >= 3 else "LOW"
-            logging.info(f"  {filt}: {len(zps)} stars, ZP = {median_zp:.3f} ± {std_mad:.3f} ({status})")
+            status = "✅" if len(zps) >= 10 else "⚠️ "
+            logging.info(f"{status} {filt}: ZP = {median:.3f} ± {std:.3f} (N={len(zps)})")
+            
+        elif len(zps) > 0:
+            median = np.median(zps)
+            std = np.std(zps)
+            zp_stats[filt] = {
+                'mean': float(np.mean(zps)),
+                'median': float(median),
+                'std': float(std),
+                'n_stars': int(len(zps)),
+                'min': float(np.min(zps)),
+                'max': float(np.max(zps))
+            }
+            logging.warning(f"⚠️  {filt}: ZP = {median:.3f} ± {std:.3f} (N={len(zps)}) - POCAS ESTRELLAS!")
         else:
             zp_stats[filt] = None
-            logging.warning(f"  {filt}: No valid measurements")
+            logging.error(f"❌ {filt}: Sin datos de zero-point")
     
     return field_name, zp_stats
 
 def main():
     """Función principal"""
-    # Encontrar todos los archivos CSV
-    csv_files = glob.glob("CenA*_gaia_xp_matches_splus_method.csv")
+    # ✅ BUSCAR ARCHIVOS CSV NUEVOS (SIN CORRECCIONES APERTURA)
+    csv_patterns = [
+        "CenA*_gaia_xp_matches_3arcsec.csv",  # Nuevos archivos
+        
+    ]
+    
+    csv_files = []
+    for pattern in csv_patterns:
+        matches = glob.glob(pattern)
+        csv_files.extend(matches)
+        if matches:
+            logging.info(f"Found {len(matches)} files with pattern: {pattern}")
+    
+    # Eliminar duplicados
+    csv_files = list(set(csv_files))
     
     if not csv_files:
-        logging.error("No CSV files found")
+        logging.error("No CSV files found with expected patterns!")
+        logging.info("Available CSV files:")
+        for f in glob.glob("*.csv"):
+            logging.info(f"  {f}")
         return
     
-    logging.info(f"Found {len(csv_files)} CSV files to process")
+    logging.info(f"Processing {len(csv_files)} CSV files: {csv_files}")
     
-    # Procesar cada campo
-    all_fields_stats = {}
-    processed_fields = []
-    failed_fields = []
-    
-    for csv_file in sorted(csv_files):
-        field_name, zp_stats = calculate_field_zero_points(csv_file)
-        
-        if zp_stats is not None:
-            all_fields_stats[field_name] = zp_stats
-            processed_fields.append(field_name)
+    # ✅ PROCESAR CADA ARCHIVO
+    all_stats = {}
+    for csv_file in csv_files:
+        field, stats = calculate_zero_points_no_aper_corr(csv_file)
+        if stats:
+            all_stats[field] = stats
         else:
-            failed_fields.append(field_name)
+            logging.error(f"❌ Failed to process {field}")
     
-    # Crear directorio de resultados
-    os.makedirs('Results', exist_ok=True)
-    
-    # Guardar resultados detallados por campo
-    if all_fields_stats:
-        # Archivo detallado (formato largo)
-        detailed_rows = []
-        for field_name, stats in all_fields_stats.items():
-            for filt, data in stats.items():
-                if data is not None:
-                    detailed_rows.append({
-                        'field': field_name,
+    # ✅ GUARDAR RESULTADOS
+    if all_stats:
+        os.makedirs('Results', exist_ok=True)
+        
+        # Formato detallado
+        detailed_data = []
+        for field, stats in all_stats.items():
+            for filt in SPLUS_FILTERS:
+                if stats.get(filt):
+                    row = {
+                        'field': field,
                         'filter': filt,
-                        'median_zp': data['median'],
-                        'mean_zp': data['mean'],
-                        'std_zp': data['std'],
-                        'mad': data['mad'],
-                        'std_mad': data['std_mad'],
-                        'mean_clipped': data['mean_clipped'],
-                        'median_clipped': data['median_clipped'],
-                        'std_clipped': data['std_clipped'],
-                        'n_stars': data['n_stars'],
-                        'min_zp': data['min'],
-                        'max_zp': data['max'],
-                        'q25': data['q25'],
-                        'q75': data['q75']
-                    })
+                        'zp_mean': stats[filt]['mean'],
+                        'zp_median': stats[filt]['median'],
+                        'zp_std': stats[filt]['std'],
+                        'n_stars': stats[filt]['n_stars']
+                    }
+                    detailed_data.append(row)
         
-        if detailed_rows:
-            df_detailed = pd.DataFrame(detailed_rows)
-            detailed_file = 'Results/all_fields_zero_points_detailed.csv'
-            df_detailed.to_csv(detailed_file, index=False)
-            logging.info(f"✓ Detailed results saved to {detailed_file}")
+        df_detailed = pd.DataFrame(detailed_data)
+        df_detailed.to_csv('Results/all_fields_zero_points_detailed_3arcsec.csv', 
+                          index=False, float_format='%.6f')
+        logging.info("✅ Detailed results saved (NO APER CORR)")
         
-        # Archivo formato SPLUS (campo, F378, F395, ...)
-        splus_rows = []
-        for field_name, stats in all_fields_stats.items():
-            row = {'field': field_name}
-            for filt in SPLUS_FILTERS_CSV:
-                if stats.get(filt) is not None:
-                    row[filt] = stats[filt]['median']
-                else:
-                    row[filt] = np.nan
-            splus_rows.append(row)
+        # Formato SPLUS
+        splus_data = []
+        for field, stats in all_stats.items():
+            row = {'field': field}
+            for filt in SPLUS_FILTERS:
+                row[filt] = stats[filt]['median'] if stats.get(filt) else np.nan
+            splus_data.append(row)
         
-        df_splus = pd.DataFrame(splus_rows)
-        splus_file = 'Results/all_fields_zero_points_splus_format.csv'
-        df_splus.to_csv(splus_file, index=False, float_format='%.6f')
-        logging.info(f"✓ SPLUS format results saved to {splus_file}")
+        df_splus = pd.DataFrame(splus_data)
+        df_splus.to_csv('Results/all_fields_zero_points_splus_format_3arcsec.csv', 
+                       index=False, float_format='%.6f')
+        logging.info("✅ SPLUS format saved (NO APER CORR)")
         
-        # Calcular promedios entre campos
-        avg_stats = {}
-        for filt in SPLUS_FILTERS_CSV:
-            zps = []
-            for field_name, stats in all_fields_stats.items():
-                if stats.get(filt) is not None:
-                    zps.append(stats[filt]['median'])
-            
+        # ✅ REPORTAR PROMEDIOS
+        logging.info("📊 PROMEDIOS FINALES (SIN CORRECCIONES APERTURA):")
+        for filt in SPLUS_FILTERS:
+            zps = [stats[filt]['median'] for stats in all_stats.values() if stats.get(filt)]
             if zps:
-                zps_array = np.array(zps)
-                avg_stats[filt] = {
-                    'median': np.median(zps_array),
-                    'mean': np.mean(zps_array),
-                    'std': np.std(zps_array),
-                    'n_fields': len(zps)
-                }
+                avg = np.mean(zps)
+                std = np.std(zps)
+                logging.info(f"  {filt}: {avg:.3f} ± {std:.3f} (N={len(zps)} campos)")
         
-        # Guardar promedios
-        avg_rows = []
-        for filt, data in avg_stats.items():
-            avg_rows.append({
-                'filter': filt,
-                'average_median_zp': data['median'],
-                'average_mean_zp': data['mean'],
-                'std_across_fields': data['std'],
-                'n_fields': data['n_fields']
-            })
+        # ✅ COMPARAR CON ZERO POINTS ANTERIORES (si existen)
+        old_zp_file = 'Results/all_fields_zero_points_splus_format_compatible.csv'
+        if os.path.exists(old_zp_file):
+            logging.info("🔍 COMPARACIÓN CON ZERO POINTS ANTERIORES:")
+            old_df = pd.read_csv(old_zp_file)
+            for filt in SPLUS_FILTERS:
+                if filt in old_df.columns:
+                    old_median = old_df[filt].median()
+                    new_median = np.mean([stats[filt]['median'] for stats in all_stats.values() if stats.get(filt)])
+                    diff = new_median - old_median
+                    logging.info(f"  {filt}: Antes={old_median:.3f}, Ahora={new_median:.3f}, Δ={diff:.3f}")
         
-        if avg_rows:
-            df_avg = pd.DataFrame(avg_rows)
-            avg_file = 'Results/average_zero_points_across_fields.csv'
-            df_avg.to_csv(avg_file, index=False, float_format='%.6f')
-            logging.info(f"✓ Average zero points saved to {avg_file}")
-            
-            # Mostrar resumen de promedios
-            logging.info("\n=== AVERAGE ZERO POINTS ACROSS FIELDS ===")
-            for _, row in df_avg.iterrows():
-                logging.info(f"{row['filter']}: {row['average_median_zp']:.3f} ± {row['std_across_fields']:.3f} (from {row['n_fields']} fields)")
-    
-    # Resumen final
-    logging.info("\n" + "="*50)
-    logging.info("PROCESSING SUMMARY")
-    logging.info("="*50)
-    logging.info(f"Total fields: {len(csv_files)}")
-    logging.info(f"Successfully processed: {len(processed_fields)}")
-    logging.info(f"Failed: {len(failed_fields)}")
-    
-    if processed_fields:
-        logging.info("\n✓ Processed fields: " + ", ".join(sorted(processed_fields)))
-    
-    if failed_fields:
-        logging.info("\n✗ Failed fields: " + ", ".join(sorted(failed_fields)))
+    else:
+        logging.error("❌ No zero-points calculated!")
 
 if __name__ == "__main__":
     main()

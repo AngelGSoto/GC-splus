@@ -20,7 +20,8 @@ in New South Wales, Australia.
 - Visibility: Only visible from the southern hemisphere and low northern latitudes
 
 ** Project Objective
-Perform aperture photometry of globular clusters in NGC 5128 using data from the SPLUS (Southern Photometric Local Universe Survey).
+Perform aperture photometry of globular clusters in NGC 5128 using data from the SPLUS
+(Southern Photometric Local Universe Survey).
 
 * Project Structure
 ** Main Directories
@@ -554,6 +555,27 @@ python Splus_photometry_final.py
 ** Estimated Execution Time
 - Complete run: 6-12 hours (hardware dependent)
 - Per field: 15-30 minutes
+
+** Final tecnique conclusion
+
+- I have problem (I think) to do the
+  aperture correction. There is a sistematic
+  offset between the my mesauremnets (SPLUS narrow band filters)
+  and the Taylor broad band filter photometry (being brighter the splus photometry).
+  I think because this offset is present in the
+  globular cluster (GC), then this dont make sense
+  becouse the phothometri between the filter should
+  be homogeneus for GC. So I do again all
+  without aperture phothometry. Here the scripts
+  withou to aperture correction part:
+
+ #+BEGIN_SRC sh
+   extract_splus_gaia_xp_without_Apercorrected_bg_corrected.py
+
+    Splus_photometry_final_bg_modeling_without_Apercorrection.py
+
+#+END_SRC
+  
 
 * Science
 
