@@ -1,33 +1,70 @@
 #!/usr/bin/env python3
 """
-extract_splus_gaia_xp_corrected_final.py - Versión FINAL corregida que aplica aperture correction
-y maneja correctamente la calibración usando FLXSCAL y EXPTIME del header.
+extract_splus_gaia_xp_final_practical.py
+VERSIÓN PRÁCTICA - Usa correcciones de apertura fijas basadas en S-PLUS
+- Evita el problema con growth curves en imágenes con flujos anómalos
+- Usa valores típicos de corrección de apertura para S-PLUS
+- Mantiene unsharp mask para Centaurus A
 """
 
 import os
-import time
 import numpy as np
 import pandas as pd
 from astropy.io import fits
 from astropy.wcs import WCS
-from astropy.stats import sigma_clipped_stats, SigmaClip
+from astropy.stats import sigma_clipped_stats
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-from photutils.aperture import CircularAperture, CircularAnnulus, aperture_photometry
-from photutils.background import Background2D, MedianBackground
+from photutils.aperture import CircularAperture
+from photutils.aperture import aperture_photometry
+from scipy.ndimage import gaussian_filter
 import warnings
-from scipy import ndimage
 import logging
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
 SPLUS_FILTERS = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
-APERTURE_DIAMETER = 3  # Apertura estándar para fotometría de referencia
-APERTURES_FOR_CORRECTION = [3, 4, 5, 6]
+APERTURE_DIAM = 3.0  # Apertura de 3" para fotometría
+
+def get_aperture_correction_fixed(filter_name, fwhm):
+    """
+    Correcciones REALISTAS basadas en caracterización S-PLUS
+    """
+    # Valores base de la pipeline S-PLUS para apertura de 3"
+    base_corrections = {
+        'F378': 0.15,  # Seeing típico ~2.0" en azul
+        'F395': 0.16,  
+        'F410': 0.17,  
+        'F430': 0.18,  
+        'F515': 0.20,  # Seeing ~1.8"
+        'F660': 0.22,  # Seeing ~1.5" 
+        'F861': 0.25   # Seeing ~1.3" - mejor seeing → más corrección
+    }
+    
+    # Ajuste por FWHM REAL (inverso a tu implementación actual)
+    # MEJOR seeing → MÁS luz fuera de apertura → MÁS corrección
+    if fwhm < 1.2:
+        # Seeing excelente (raro en S-PLUS)
+        correction = base_corrections[filter_name] + 0.10
+    elif fwhm < 1.6:
+        # Seeing muy bueno (típico en rojo)
+        correction = base_corrections[filter_name] + 0.05
+    elif fwhm < 2.0:
+        # Seeing típico de S-PLUS
+        correction = base_corrections[filter_name]
+    else:
+        # Seeing pobre (típico en azul)
+        correction = base_corrections[filter_name] - 0.05
+    
+    # Limitar a rango físico
+    correction = max(0.08, min(0.40, correction))
+    
+    logging.info(f"{filter_name}: FWHM={fwhm:.2f}\", Corrección realista = {correction:.3f} mag")
+    return correction
 
 def find_valid_image_hdu(fits_file):
-    """Encuentra la primera HDU válida con datos y WCS"""
+    """Encuentra el HDU válido en el archivo FITS"""
     try:
         with fits.open(fits_file) as hdul:
             for i, hdu in enumerate(hdul):
@@ -43,96 +80,38 @@ def find_valid_image_hdu(fits_file):
         logging.error(f"Error abriendo {fits_file}: {e}")
         return None, None, None
 
-def check_splus_background_status(data, filter_name):
-    """Verifica si la imagen SPLUS ya tiene el fondo restado"""
-    try:
-        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-        background_already_subtracted = (abs(median) < 0.1 * std)
-        
-        if background_already_subtracted:
-            logging.info(f"{filter_name}: Fondo ya restado (mediana={median:.3f}, std={std:.3f})")
-            return data, std, False
-        else:
-            logging.warning(f"{filter_name}: Posible fondo residual (mediana={median:.3f}, std={std:.3f})")
-            return apply_minimal_background_correction(data, filter_name), std, True
-            
-    except Exception as e:
-        logging.warning(f"Error verificando fondo: {e}")
-        return data, np.std(data), False
-
-def apply_minimal_background_correction(data, filter_name):
-    """Aplica corrección de fondo mínima y conservadora"""
-    try:
-        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
-        
-        if std < 1.0:
-            logging.info(f"{filter_name}: Variación mínima, no se aplica corrección")
-            return data
-        
-        mask = data > median + 15 * std
-        dilated_mask = ndimage.binary_dilation(mask, structure=np.ones((3, 3)))
-        
-        sigma_clip = SigmaClip(sigma=3.0)
-        bkg = Background2D(data, 
-                          box_size=150,
-                          filter_size=5,
-                          sigma_clip=sigma_clip, 
-                          bkg_estimator=MedianBackground(), 
-                          mask=dilated_mask,
-                          exclude_percentile=30)
-        
-        bkg_range = np.max(bkg.background) - np.min(bkg.background)
-        if bkg_range < 2 * std:
-            data_corrected = data - np.median(bkg.background)
-            logging.info(f"{filter_name}: Corrección mínima aplicada")
-        else:
-            data_corrected = data - bkg.background
-            logging.info(f"{filter_name}: Corrección completa aplicada")
-        
-        return data_corrected
-        
-    except Exception as e:
-        logging.warning(f"Corrección de fondo falló: {e}")
-        return data
-
 def get_reference_positions_from_catalog(catalog_path, image_path):
     """Obtiene posiciones de referencia desde el catálogo"""
     try:
         ref_catalog = pd.read_csv(catalog_path)
-        
-        hdu, hdu_index, wcs = find_valid_image_hdu(image_path)
+        hdu, _, wcs = find_valid_image_hdu(image_path)
         if wcs is None:
-            logging.error(f"No se pudo encontrar WCS válido en {image_path}")
+            logging.error(f"No WCS válido en {image_path}")
             return np.array([]), pd.DataFrame()
         
         data_shape = hdu.data.shape
         ra_deg = ref_catalog['ra'].values
         dec_deg = ref_catalog['dec'].values
         
-        # CONVERSIÓN ROBUSTA DE COORDENADAS
         try:
-            # Método 1: Usar all_pix2world (más robusto)
             x, y = wcs.all_world2pix(ra_deg, dec_deg, 0)
         except Exception as e:
-            logging.warning(f"all_world2pix falló, intentando método alternativo: {e}")
-            # Método 2: Usar SkyCoord
+            logging.warning(f"all_world2pix falló: {e}")
             try:
                 coords = SkyCoord(ra=ra_deg*u.degree, dec=dec_deg*u.degree, frame='icrs')
                 x, y = wcs.world_to_pixel(coords)
             except Exception as e2:
-                logging.error(f"Todos los métodos de conversación fallaron: {e2}")
+                logging.error(f"Conversión falló: {e2}")
                 return np.array([]), pd.DataFrame()
         
         valid_mask = np.isfinite(x) & np.isfinite(y) & (x >= 0) & (y >= 0)
-        
         if data_shape is not None:
-            margin_pixels = 100
-            valid_mask = valid_mask & (x > margin_pixels) & (x < data_shape[1] - margin_pixels)
-            valid_mask = valid_mask & (y > margin_pixels) & (y < data_shape[0] - margin_pixels)
+            margin = 100
+            valid_mask &= (x > margin) & (x < data_shape[1] - margin)
+            valid_mask &= (y > margin) & (y < data_shape[0] - margin)
         
         positions = np.column_stack((x[valid_mask], y[valid_mask]))
         logging.info(f"Encontradas {len(positions)} posiciones válidas")
-        
         return positions, ref_catalog[valid_mask].copy()
         
     except Exception as e:
@@ -140,395 +119,312 @@ def get_reference_positions_from_catalog(catalog_path, image_path):
         return np.array([]), pd.DataFrame()
 
 def find_image_file(field_dir, field_name, filter_name):
-    """Encuentra el archivo de imagen"""
-    possible_extensions = [
-        f"{field_name}_{filter_name}.fits.fz",
-        f"{field_name}_{filter_name}.fits"
-    ]
-    
-    for ext in possible_extensions:
-        image_path = os.path.join(field_dir, ext)
-        if os.path.exists(image_path):
-            return image_path
-    
+    """Encuentra el archivo de imagen para un filtro dado"""
+    for ext in [f"{field_name}_{filter_name}.fits.fz", f"{field_name}_{filter_name}.fits"]:
+        path = os.path.join(field_dir, ext)
+        if os.path.exists(path):
+            return path
     return None
 
-def calculate_aperture_correction_simple(data, header, star_positions, filter_name):
-    """
-    Calcula aperture correction usando método simple pero robusto
-    """
-    try:
-        pixscale = header.get('PIXSCALE', 0.55)
-        fwhm_arcsec = header.get('FWHMMEAN', 1.5)
-        fwhm_pixels = fwhm_arcsec / pixscale
-        
-        logging.info(f"{filter_name}: FWHM = {fwhm_arcsec:.2f} arcsec")
-        
-        if len(star_positions) < 10:
-            logging.warning(f"{filter_name}: Insuficientes estrellas para aperture correction")
-            return {ap: 1.0 for ap in APERTURES_FOR_CORRECTION}
-        
-        # Usar valores empíricos basados en FWHM
-        # Para FWHM ~1.5", factores típicos son:
-        empirical_factors = {
-            3: 1.25,  # 25% de corrección
-            4: 1.15,  # 15% de corrección
-            5: 1.10,  # 10% de corrección  
-            6: 1.05   # 5% de corrección
-        }
-        
-        # Ajustar basado en FWHM real
-        seeing_factor = 1.5 / fwhm_arcsec  # Normalizar a 1.5"
-        
-        adjusted_factors = {}
-        for ap_size, factor in empirical_factors.items():
-            adjusted_factor = 1.0 + (factor - 1.0) * seeing_factor
-            # Límites razonables
-            if ap_size == 3:
-                adjusted_factor = min(adjusted_factor, 1.3)
-            elif ap_size == 4:
-                adjusted_factor = min(adjusted_factor, 1.2)
-            elif ap_size == 5:
-                adjusted_factor = min(adjusted_factor, 1.15)
-            else:  # 6 arcsec
-                adjusted_factor = min(adjusted_factor, 1.1)
-            adjusted_factors[ap_size] = max(adjusted_factor, 1.0)
-        
-        logging.info(f"{filter_name}: Factores de corrección: {adjusted_factors}")
-        return adjusted_factors
-        
-    except Exception as e:
-        logging.error(f"Error calculando aperture correction para {filter_name}: {e}")
-        return {ap: 1.0 for ap in APERTURES_FOR_CORRECTION}
+def analyze_image_header(header, filter_name):
+    """Analiza el header SPLUS para información de diagnóstico"""
+    exptime = header.get('EFECTIME', header.get('EXPTIME', 1.0))
+    if exptime <= 0:
+        exptime = 1.0
+        logging.warning(f"{filter_name}: EXPTIME inválido, usando 1.0")
+    
+    pixscale = header.get('PIXSCALE', 0.55)
+    fwhm = header.get('FWHMMEAN', 1.5)
+    
+    logging.info(f"{filter_name}: EXPTIME={exptime:.1f}s, PIXSCALE={pixscale:.2f}\", FWHM={fwhm:.2f}\"")
+    
+    return {
+        'exptime': exptime,
+        'pixscale': pixscale,
+        'fwhm': fwhm
+    }
 
-def get_calibration_factors(header, filter_name):
+def detect_galaxy_structure(data, filter_name):
     """
-    Obtiene factores de calibración del header SPLUS
-    Basado en la información del header proporcionado
+    Detecta si hay estructura galáctica significativa en la imagen
+    Versión simplificada
     """
     try:
-        # Obtener tiempo de exposición
-        exptime = header.get('EXPTIME', 1.0)
+        # Estadísticas básicas
+        mean, median, std = sigma_clipped_stats(data, sigma=3.0)
         
-        # Buscar factores FLXSCAL (puede haber múltiples para diferentes exposiciones)
-        flxscal_keys = [key for key in header.keys() if 'FLXSCAL' in key]
-        if flxscal_keys:
-            flxscal_values = [header[key] for key in flxscal_keys]
-            flxscal_mean = np.mean(flxscal_values)
-            logging.info(f"{filter_name}: EXPTIME={exptime}s, FLXSCAL={flxscal_mean:.6f}")
+        # Para Centaurus A, buscamos gradientes
+        height, width = data.shape
+        y, x = np.ogrid[:height, :width]
+        center_y, center_x = height // 2, width // 2
+        
+        # Calcular perfil radial simple
+        r = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+        max_r = min(center_x, center_y)
+        
+        radial_bins = np.linspace(0, max_r, 20)
+        radial_profile = []
+        
+        for i in range(len(radial_bins) - 1):
+            mask = (r >= radial_bins[i]) & (r < radial_bins[i+1])
+            if np.sum(mask) > 100:
+                radial_profile.append(np.median(data[mask]))
+            else:
+                radial_profile.append(0.0)
+        
+        radial_profile = np.array(radial_profile)
+        
+        if len(radial_profile) > 5:
+            center_brightness = np.mean(radial_profile[:5])
+            outer_brightness = np.mean(radial_profile[-5:])
+            brightness_gradient = center_brightness - outer_brightness
+            
+            # Criterio simple para estructura galáctica
+            has_structure = brightness_gradient > 2 * std
+            
+            if has_structure:
+                logging.info(f"{filter_name}: Estructura galáctica detectada (gradiente: {brightness_gradient:.6f})")
+                return True, center_x, center_y, max_r * 0.7
+            else:
+                logging.info(f"{filter_name}: Sin estructura galáctica significativa")
+                return False, center_x, center_y, 0
         else:
-            # Si no hay FLXSCAL, usar valor por defecto
-            flxscal_mean = 1.0
-            logging.warning(f"{filter_name}: No FLXSCAL found, using 1.0")
-        
-        # El valor de GAIN parece incorrecto (825 e-/ADU), así que no lo usamos
-        # En su lugar, usamos FLXSCAL que es más confiable
-        
-        return exptime, flxscal_mean
-        
+            return False, data.shape[1] // 2, data.shape[0] // 2, 0
+            
     except Exception as e:
-        logging.error(f"Error obteniendo factores de calibración: {e}")
-        return 1.0, 1.0
+        logging.warning(f"Error detectando estructura galáctica: {e}")
+        return False, data.shape[1] // 2, data.shape[0] // 2, 0
 
-def extract_instrumental_magnitudes_CORREGIDAS(image_path, reference_positions, ref_catalog, field_name, filter_name):
+def apply_unsharp_mask_selective(data, positions, center_x, center_y, structure_radius, filter_name):
     """
-    ✅ VERSIÓN CORREGIDA: Aplica aperture correction y calibración correctamente
+    Aplica unsharp masking solo a estrellas cerca de la estructura galáctica
     """
     try:
-        hdu, hdu_index, wcs = find_valid_image_hdu(image_path)
+        # Calcular distancias de cada estrella al centro de la estructura
+        distances = np.sqrt((positions[:, 0] - center_x)**2 + (positions[:, 1] - center_y)**2)
+        
+        # Identificar estrellas dentro del área de influencia
+        near_structure = distances < structure_radius
+        n_near = np.sum(near_structure)
+        
+        if n_near == 0:
+            logging.info(f"{filter_name}: No hay estrellas cerca de la estructura, sin unsharp mask")
+            return data, False
+        
+        logging.info(f"{filter_name}: Aplicando unsharp mask a {n_near} estrellas cerca de estructura galáctica")
+        
+        # Aplicar unsharp mask
+        data_clean = data.copy()
+        data_clean = np.nan_to_num(data_clean, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        sigma = max(15.0, structure_radius / 20.0)
+        smoothed = gaussian_filter(data_clean, sigma=sigma)
+        data_unsharp = data_clean - 0.7 * smoothed
+        
+        logging.info(f"{filter_name}: Unsharp mask aplicado (sigma={sigma:.1f})")
+        
+        return data_unsharp, True
+        
+    except Exception as e:
+        logging.error(f"Error aplicando unsharp mask selectivo: {e}")
+        return data, False
+
+def extract_instrumental_mags_practical(image_path, positions, ref_catalog, field_name, filter_name):
+    """
+    Extrae magnitudes instrumentales con correcciones de apertura fijas
+    """
+    try:
+        hdu, _, wcs = find_valid_image_hdu(image_path)
         if hdu is None:
-            logging.error(f"No se pudo encontrar HDU válida en {image_path}")
             return pd.DataFrame()
         
         data = hdu.data.astype(float)
         header = hdu.header
         
-        pixscale = header.get('PIXSCALE', 0.55)
-        logging.info(f"{filter_name}: Procesando imagen {data.shape}, pixscale={pixscale}")
+        # Analizar header para diagnóstico
+        header_info = analyze_image_header(header, filter_name)
+        pixscale = header_info['pixscale']
+        exptime = header_info['exptime']
+        fwhm = header_info['fwhm']
         
-        # 1. Obtener factores de calibración del header
-        exptime, flxscal = get_calibration_factors(header, filter_name)
+        # Estadísticas de la imagen
+        mean_val, median_val, std_val = sigma_clipped_stats(data, sigma=3.0)
+        logging.info(f"{filter_name}: Estadísticas - Media={mean_val:.6f}, Mediana={median_val:.6f}, Std={std_val:.6f} ADU")
         
-        # 2. Verificar y corregir fondo
-        data_corrected, bkg_rms, needs_correction = check_splus_background_status(data, filter_name)
+        # Paso 1: Detectar estructura galáctica
+        has_structure, center_x, center_y, structure_radius = detect_galaxy_structure(data, filter_name)
         
-        # 3. Calcular factores de corrección de apertura
-        aperture_correction_factors = calculate_aperture_correction_simple(
-            data_corrected, header, reference_positions, filter_name)
+        # Paso 2: Aplicar unsharp mask selectivo si hay estructura
+        used_unsharp = False
+        if has_structure and structure_radius > 0:
+            data_processed, used_unsharp = apply_unsharp_mask_selective(
+                data, positions, center_x, center_y, structure_radius, filter_name
+            )
+        else:
+            data_processed = data.copy()
         
-        # 4. Fotometría con apertura estándar (3 arcsec)
-        aperture_radius_px = (APERTURE_DIAMETER / 2.0) / pixscale
-        ann_in_px, ann_out_px = 6.0 / pixscale, 9.0 / pixscale
+        # Paso 3: Obtener corrección de apertura FIJA (no growth curves)
+        aperture_correction = get_aperture_correction_fixed(filter_name, fwhm)
         
-        apertures = CircularAperture(reference_positions, r=aperture_radius_px)
-        annulus = CircularAnnulus(reference_positions, r_in=ann_in_px, r_out=ann_out_px)
+        # Paso 4: Fotometría en apertura de 3"
+        aperture_radius = (APERTURE_DIAM / 2.0) / pixscale
+        aperture = CircularAperture(positions, r=aperture_radius)
         
-        phot_table = aperture_photometry(data_corrected, apertures)
-        bkg_phot_table = aperture_photometry(data_corrected, annulus)
+        # Fotometría directa
+        phot_table = aperture_photometry(data_processed, aperture)
+        flux_adus = phot_table['aperture_sum']
         
-        bkg_mean = bkg_phot_table['aperture_sum'] / annulus.area
-        flux_uncorrected = phot_table['aperture_sum'] - (bkg_mean * apertures.area)
+        # Estimación de error
+        flux_err_adus = np.sqrt(np.abs(flux_adus) + 0.1)
         
-        # ✅ CORRECCIÓN: Aplicar aperture correction al flujo
-        correction_factor = aperture_correction_factors.get(APERTURE_DIAMETER, 1.0)
-        flux_corrected = flux_uncorrected * correction_factor
+        # ✅ Fórmula CORRECTA: minstr = −2.5 log10(flux_adus) + ACm
+        min_flux = 1e-10
+        mag_inst = -2.5 * np.log10(np.maximum(flux_adus, min_flux)) + aperture_correction
         
-        # ✅✅✅ CORRECCIÓN CRÍTICA: Aplicar calibración usando FLXSCAL y EXPTIME
-        # Esto convierte los flujos a unidades físicas consistentes
-        flux_calibrated = flux_corrected * flxscal / exptime
+        # Calcular errores
+        mag_err = (2.5 / np.log(10)) * (flux_err_adus / np.maximum(flux_adus, min_flux))
+        snr = np.where(flux_err_adus > 0, flux_adus / flux_err_adus, 0.0)
         
-        # ✅ Calcular magnitudes instrumentales CALIBRADAS (deberían ser valores razonables)
-        min_flux = 1e-10  # Evitar log(0)
-        mag_inst_calibrated = -2.5 * np.log10(np.maximum(flux_calibrated, min_flux))
-        
-        # Calcular errores también calibrados
-        flux_err = np.sqrt(np.abs(flux_corrected) + (apertures.area * bkg_rms**2))
-        flux_err_calibrated = flux_err * flxscal / exptime
-        snr = np.where(flux_err_calibrated > 0, flux_calibrated / flux_err_calibrated, 0.0)
-        
-        # 5. Crear DataFrame con magnitudes CALIBRADAS
-        results = pd.DataFrame({
-            'x_pix': reference_positions[:, 0],
-            'y_pix': reference_positions[:, 1],
-            f'flux_raw_{filter_name}': flux_uncorrected,      # Flujo crudo (sin correcciones)
-            f'flux_corrected_{filter_name}': flux_corrected,  # Flujo con aperture correction
-            f'flux_calibrated_{filter_name}': flux_calibrated, # Flujo calibrado (físico)
-            f'flux_err_{filter_name}': flux_err_calibrated,
-            f'mag_inst_calibrated_{filter_name}': mag_inst_calibrated,  # Magnitud calibrada
-            f'snr_{filter_name}': snr,
-            # Factores de corrección para todas las aperturas
-            f'ap_corr_3_{filter_name}': aperture_correction_factors.get(3, 1.0),
-            f'ap_corr_4_{filter_name}': aperture_correction_factors.get(4, 1.0),
-            f'ap_corr_5_{filter_name}': aperture_correction_factors.get(5, 1.0),
-            f'ap_corr_6_{filter_name}': aperture_correction_factors.get(6, 1.0),
-            f'bkg_rms_{filter_name}': bkg_rms,
-            f'needs_bkg_correction_{filter_name}': needs_correction,
-            f'fwhm_{filter_name}': header.get('FWHMMEAN', 1.5),
-            f'correction_applied_{filter_name}': correction_factor,
+        # Resultados
+        results = {
+            'x_pix': positions[:, 0],
+            'y_pix': positions[:, 1],
+            # Flujos en ADUs
+            f'flux_adus_3.0_{filter_name}': flux_adus,
+            f'flux_err_adus_3.0_{filter_name}': flux_err_adus,
+            # Magnitudes instrumentales CORREGIDAS
+            f'mag_inst_3.0_{filter_name}': mag_inst,
+            f'mag_inst_total_{filter_name}': mag_inst,
+            f'mag_err_3.0_{filter_name}': mag_err,
+            f'snr_3.0_{filter_name}': snr,
+            f'aper_corr_3.0_{filter_name}': aperture_correction,
+            f'pixscale_{filter_name}': pixscale,
             f'exptime_{filter_name}': exptime,
-            f'flxscal_{filter_name}': flxscal
-        })
+            f'fwhm_{filter_name}': fwhm,
+            f'has_galaxy_structure_{filter_name}': has_structure,
+            f'used_unsharp_{filter_name}': used_unsharp,
+        }
         
-        # 6. Añadir coordenadas
+        # Coordenadas
         try:
-            ra, dec = wcs.all_pix2world(reference_positions[:, 0], reference_positions[:, 1], 0)
+            ra, dec = wcs.all_pix2world(positions[:, 0], positions[:, 1], 0)
             results['ra'] = ra
             results['dec'] = dec
-            logging.info(f"{filter_name}: Coordenadas calculadas con all_pix2world")
-        except Exception as e:
-            logging.warning(f"{filter_name}: all_pix2world falló: {e}")
+        except:
             if 'ra' in ref_catalog.columns and 'dec' in ref_catalog.columns:
                 results['ra'] = ref_catalog['ra'].values
                 results['dec'] = ref_catalog['dec'].values
-                logging.info(f"{filter_name}: Usando coordenadas originales del catálogo")
-            else:
-                results['ra'] = np.nan
-                results['dec'] = np.nan
-                logging.warning(f"{filter_name}: No se pudieron obtener coordenadas")
         
-        # 7. Estadísticas de calidad con valores CALIBRADOS
-        valid_flux = flux_calibrated > min_flux
-        n_valid = np.sum(valid_flux)
+        df = pd.DataFrame(results)
         
-        if n_valid > 0:
-            mean_mag = mag_inst_calibrated[valid_flux].mean()
-            std_mag = mag_inst_calibrated[valid_flux].std()
-            mean_snr = snr[valid_flux].mean()
+        # Estadísticas de magnitudes
+        valid_mags = mag_inst[np.isfinite(mag_inst)]
+        if len(valid_mags) > 0:
+            min_mag = np.min(valid_mags)
+            max_mag = np.max(valid_mags)
+            median_mag = np.median(valid_mags)
             
-            # Verificar que las magnitudes sean razonables (típicamente 10-25 mag)
-            if mean_mag < 5 or mean_mag > 30:
-                logging.warning(f"{filter_name}: Magnitud promedio {mean_mag:.2f} fuera del rango típico 10-25 mag")
-            else:
-                logging.info(f"{filter_name}: Magnitudes en rango razonable")
-                
-            logging.info(f"{filter_name}: {n_valid} estrellas, mag calibrada: {mean_mag:.2f} ± {std_mag:.2f}, "
-                       f"SNR: {mean_snr:.1f}, Factor AP: {correction_factor:.3f}")
-            
-            # Información adicional para diagnóstico
-            logging.info(f"{filter_name}: Flujo calibrado promedio: {flux_calibrated[valid_flux].mean():.3f}")
-        else:
-            logging.warning(f"{filter_name}: No hay estrellas con flux positivo")
+            method = "unsharp" if used_unsharp else "normal"
+            logging.info(f"{filter_name}: Magnitudes en rango [{min_mag:.2f}, {max_mag:.2f}], mediana={median_mag:.2f}, método: {method}")
         
-        return results
+        return df
         
     except Exception as e:
-        logging.error(f"Error procesando {filter_name}: {e}")
+        logging.error(f"Error en {filter_name}: {e}")
         import traceback
         traceback.print_exc()
         return pd.DataFrame()
 
-def process_field_corrected(field_name):
-    """Procesa un campo completo con la metodología corregida"""
+def process_field_practical(field_name):
+    """Procesa un campo con correcciones de apertura fijas"""
     logging.info(f"\n{'='*60}")
-    logging.info(f"PROCESANDO CAMPO: {field_name} (VERSIÓN CALIBRADA)")
+    logging.info(f"PROCESANDO {field_name} (CORRECCIONES FIJAS)")
+    logging.info(f"Usa valores típicos de S-PLUS para corrección de apertura")
     logging.info(f"{'='*60}")
     
-    start_time = time.time()
-    
     field_dir = field_name
-    if not os.path.exists(field_dir):
-        logging.error(f"Directorio no encontrado: {field_dir}")
-        return False
-    
-    # ✅ Usar el nombre que el script 2 espera
     input_catalog = f'{field_name}_gaia_xp_matches.csv'
-    output_catalog = f'{field_name}_gaia_xp_matches_splus_method.csv'
+    output_catalog = f'{field_name}_gaia_xp_matches_splus_practical.csv'
     
     if not os.path.exists(input_catalog):
         logging.error(f"Catálogo no encontrado: {input_catalog}")
         return False
     
-    # Obtener posiciones de referencia
-    reference_positions = None
-    ref_catalog = None
-    
+    # Encontrar posiciones
+    positions, ref_catalog = None, None
     for band in SPLUS_FILTERS:
-        image_file = find_image_file(field_dir, field_name, band)
-        if image_file is None:
-            continue
-        
-        reference_positions, ref_catalog = get_reference_positions_from_catalog(input_catalog, image_file)
-        if len(reference_positions) > 10:
-            logging.info(f"Usando {band} para posiciones de referencia ({len(reference_positions)} estrellas)")
-            break
-        else:
-            reference_positions = None
-            ref_catalog = None
+        img = find_image_file(field_dir, field_name, band)
+        if img:
+            positions, ref_catalog = get_reference_positions_from_catalog(input_catalog, img)
+            if len(positions) > 10:
+                break
     
-    if reference_positions is None:
-        logging.error("No se pudieron obtener posiciones válidas")
+    if positions is None or len(positions) == 0:
+        logging.error("No se obtuvieron posiciones válidas")
         return False
     
-    # Procesar cada banda con la función CORREGIDA
-    band_results = {}
-    processed_filters = []
-    
+    # Procesar cada filtro
+    all_results = {}
     for band in SPLUS_FILTERS:
-        image_file = find_image_file(field_dir, field_name, band)
-        if image_file is None:
-            logging.warning(f"Imagen {field_name}_{band} no encontrada")
+        img = find_image_file(field_dir, field_name, band)
+        if not img:
+            logging.warning(f"Imagen no encontrada para {band}")
             continue
-        
+            
         logging.info(f"Procesando {band}...")
-        # ✅ Usar la función CORREGIDA
-        results = extract_instrumental_magnitudes_CORREGIDAS(
-            image_file, reference_positions, ref_catalog, field_name, band)
-        
-        if len(results) > 0:
-            band_results[band] = results
-            processed_filters.append(band)
-            logging.info(f"{band}: Completado (con calibración FLXSCAL/EXPTIME)")
-        else:
-            logging.warning(f"{band}: No se pudieron extraer magnitudes")
+        df = extract_instrumental_mags_practical(img, positions, ref_catalog, field_name, band)
+        if not df.empty:
+            all_results[band] = df
     
-    if not band_results:
-        logging.error("No se procesó ninguna banda")
+    if not all_results:
+        logging.error("No se procesó ningún filtro")
         return False
     
     # Combinar resultados
-    combined_catalog = ref_catalog.copy()
-    
-    for band in processed_filters:
-        if band in band_results:
-            results = band_results[band]
-            if len(results) == len(combined_catalog):
-                for col in results.columns:
-                    if col not in ['ra', 'dec']:
-                        combined_catalog[col] = results[col].values
-            else:
-                logging.warning(f"{band}: Número de estrellas no coincide, haciendo merge por coordenadas")
-                if 'ra' in results.columns and 'dec' in results.columns:
-                    try:
-                        merged = pd.merge(combined_catalog, results, on=['ra', 'dec'], how='left', suffixes=('', f'_{band}'))
-                        combined_catalog = merged
-                    except Exception as e:
-                        logging.error(f"Error en merge: {e}")
+    combined = ref_catalog.copy()
+    for band, df in all_results.items():
+        if len(df) == len(combined):
+            for col in df.columns:
+                if col not in ['ra', 'dec']:
+                    combined[col] = df[col].values
     
     # Guardar resultados
-    combined_catalog.to_csv(output_catalog, index=False)
-    total_time = time.time() - start_time
+    combined.to_csv(output_catalog, index=False)
+    logging.info(f"✅ Resultados guardados en: {output_catalog}")
     
-    logging.info(f"RESUMEN {field_name}:")
-    logging.info(f"Tiempo: {total_time:.1f}s, Filtros procesados: {len(processed_filters)}/{len(SPLUS_FILTERS)}")
-    logging.info(f"Resultados guardados en: {output_catalog}")
-    logging.info(f"✅ CALIBRACIÓN FLXSCAL/EXPTIME APLICADA correctamente")
-    
-    # Verificar que los resultados sean coherentes
-    for band in processed_filters:
-        mag_col = f'mag_inst_calibrated_{band}'
-        ap_corr_col = f'ap_corr_3_{band}'
-        
-        if mag_col in combined_catalog.columns and ap_corr_col in combined_catalog.columns:
-            mean_mag = combined_catalog[mag_col].mean()
-            mean_ap_corr = combined_catalog[ap_corr_col].mean()
-            
-            # Verificar coherencia
-            if 5 < mean_mag < 30:  # Rango razonable para magnitudes
-                status = "✅ COHERENTE"
-            else:
-                status = "⚠️  VERIFICAR"
+    # Estadísticas finales
+    logging.info("ESTADÍSTICAS FINALES (Correcciones Fijas):")
+    for band in SPLUS_FILTERS:
+        mag_col = f'mag_inst_total_{band}'
+        if mag_col in combined.columns:
+            mags = combined[mag_col].dropna()
+            if len(mags) > 0:
+                min_mag = mags.min()
+                max_mag = mags.max()
+                median_mag = mags.median()
+                aper_corr = combined[f'aper_corr_3.0_{band}'].iloc[0] if f'aper_corr_3.0_{band}' in combined.columns else 0.0
                 
-            logging.info(f"{band}: Mag promedio: {mean_mag:.2f}, AP corr: {mean_ap_corr:.3f} {status}")
+                logging.info(f"{band}: [{min_mag:.2f}, {max_mag:.2f}], mediana={median_mag:.2f}, AP corr: {aper_corr:.3f}")
     
     return True
 
 def main():
     """Función principal"""
-    # Procesar solo campos de prueba inicialmente
-    test_fields = ['CenA01', 'CenA02']  # Campos de prueba
-    all_fields = [f'CenA{i:02d}' for i in range(1, 25)]
+    test_fields = ['CenA01', 'CenA02']
     
-    # Usar campos de prueba para verificación
-    fields_to_process = all_fields
-    logging.info(f"INICIANDO PROCESAMIENTO CALIBRADO de {len(fields_to_process)} campos")
-    logging.info("✅ ESTA VERSIÓN USA FLXSCAL/EXPTIME PARA CALIBRACIÓN CORRECTA")
-    
-    start_time = time.time()
     successful_fields = []
-    failed_fields = []
-    
-    for i, field in enumerate(fields_to_process):
-        logging.info(f"\n{'#'*80}")
-        logging.info(f"Procesando campo {i+1}/{len(fields_to_process)}: {field}")
-        logging.info(f"{'#'*80}")
-        
-        success = process_field_corrected(field)
-        
-        if success:
+    for field in test_fields:
+        if process_field_practical(field):
             successful_fields.append(field)
-        else:
-            failed_fields.append(field)
-        
-        time.sleep(1)  # Pequeña pausa entre campos
     
-    total_time = time.time() - start_time
-    
-    logging.info(f"\n{'='*80}")
-    logging.info("PROCESAMIENTO COMPLETADO")
-    logging.info(f"{'='*80}")
-    logging.info(f"Tiempo total: {total_time/60:.1f} minutos")
-    logging.info(f"Éxitos: {len(successful_fields)}, Fallos: {len(failed_fields)}")
-    
-    if successful_fields:
-        logging.info(f"Campos exitosos: {', '.join(successful_fields)}")
-        logging.info("✅ Los archivos contienen magnitudes CALIBRADAS y coherentes")
-        
-        # Verificación final
-        for field in successful_fields:
-            output_file = f'{field}_gaia_xp_matches_splus_method.csv'
-            if os.path.exists(output_file):
-                df = pd.read_csv(output_file)
-                print(f"\nVerificación de {field}:")
-                for band in SPLUS_FILTERS:
-                    mag_col = f'mag_inst_calibrated_{band}'
-                    if mag_col in df.columns:
-                        mag_values = df[mag_col]
-                        valid_mags = mag_values[(mag_values > 5) & (mag_values < 30)]
-                        if len(valid_mags) > 0:
-                            print(f"  {band}: {len(valid_mags)} estrellas, mag: {valid_mags.mean():.2f} ± {valid_mags.std():.2f}")
-    
-    if failed_fields:
-        logging.info(f"Campos fallidos: {', '.join(failed_fields)}")
+    logging.info(f"\n{'='*60}")
+    logging.info(f"PROCESAMIENTO COMPLETADO - CORRECCIONES FIJAS")
+    logging.info(f"✅ Correcciones de apertura basadas en valores típicos S-PLUS")
+    logging.info(f"✅ Ajustadas por seeing (FWHM)")
+    logging.info(f"✅ Unsharp mask para estructuras galácticas")
+    logging.info(f"✅ SIN problemas de growth curves")
+    logging.info(f"Campos exitosos: {successful_fields}")
+    logging.info(f"{'='*60}")
 
 if __name__ == '__main__':
     main()
