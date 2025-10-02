@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Splus_photometry_buzzo_method_ROBUST_COMPLETE.py
-VERSIÓN COMPLETA CON CORRECCIÓN DE APERTURA ROBUSTA
+Splus_photometry_buzzo_method_20_ISOLATED_GCs.py
+VERSIÓN CON 20 GCs AISLADOS PARA CORRECCIÓN DE APERTURA MÁS ROBUSTA
 """
 
 import numpy as np
@@ -26,9 +26,9 @@ import traceback
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 warnings.filterwarnings('ignore')
 
-def process_single_filter_robust(args):
+def process_single_filter_20_isolated(args):
     """
-    ✅ VERSIÓN CON CORRECCIÓN DE APERTURA MÁS ROBUSTA
+    ✅ VERSIÓN CON 20 GCs AISLADOS PARA CORRECCIÓN DE APERTURA
     """
     # Desempaquetar argumentos
     (field_name, filter_name, valid_positions, valid_indices, 
@@ -94,32 +94,30 @@ def process_single_filter_robust(args):
                 logging.error(f"Error in unsharp masking: {e}")
                 return data
 
-        def calculate_aperture_correction_robust(isolated_positions, data_unsharp, filter_name, 
-                                               pixel_scale, debug=False):
+        def calculate_aperture_correction_20_isolated(isolated_positions, data_unsharp, filter_name, 
+                                                    pixel_scale, debug=False):
             """
-            ✅ CORRECCIÓN DE APERTURA MÁS ROBUSTA Y FÍSICA
-            Basada en valores típicos de seeing y propiedades de GCs
+            ✅ CORRECCIÓN DE APERTURA CON 20 GCs AISLADOS - MÁS ROBUSTA
             """
             try:
-                # ✅ VALORES POR DEFECTO BASADOS EN FÍSICA Y EXPERIENCIA
-                # Para S-PLUS con seeing ~1.5-2.0", las correcciones típicas son:
+                # ✅ VALORES POR DEFECTO FÍSICOS
                 default_corrections = {
                     'F378': (-0.25, -0.12),   # UV - más afectado por seeing
                     'F395': (-0.22, -0.10),   # UV 
                     'F410': (-0.20, -0.09),   # Azul
                     'F430': (-0.18, -0.08),   # Azul
-                    'F515': (-0.15, -0.07),   # Verde - menos afectado
-                    'F660': (-0.12, -0.06),   # Rojo - menos afectado  
-                    'F861': (-0.10, -0.05)    # IR - menos afectado
+                    'F515': (-0.15, -0.07),   # Verde
+                    'F660': (-0.12, -0.06),   # Rojo  
+                    'F861': (-0.10, -0.05)    # IR
                 }
                 
-                if len(isolated_positions) < 3:
-                    logging.warning(f"{filter_name}: Not enough isolated GCs, using default corrections")
+                # ✅ REQUERIR MÍNIMO 10 GCs AISLADOS PARA CÁLCULO
+                if len(isolated_positions) < 10:
+                    logging.warning(f"{filter_name}: Not enough isolated GCs ({len(isolated_positions)}), using default corrections")
                     return default_corrections.get(filter_name, (-0.15, -0.07))
                 
                 aperture_corrections_2 = []
                 aperture_corrections_3 = []
-                # ✅ APERTURAS MÁS PRÁCTICAS
                 aperture_diams = np.array([2.0, 3.0, 4.0, 5.0, 6.0])
                 
                 successful_gcs = 0
@@ -162,18 +160,18 @@ def process_single_filter_robust(args):
                             else:
                                 fluxes.append(np.nan)
                         
-                        # ✅ CRITERIO MÁS ESTRICTO PERO REALISTA
+                        # ✅ CRITERIO MÁS ESTRICTO CON MÁS GCs
                         if valid_measurements >= 4:
                             valid_indices = ~np.isnan(fluxes)
                             valid_diams = aperture_diams[valid_indices]
                             valid_fluxes = np.array(fluxes)[valid_indices]
                             
-                            # Verificar comportamiento físico: flujo debe aumentar con apertura
+                            # Verificar comportamiento físico
                             if (valid_fluxes[0] < valid_fluxes[-1] and  # 2" < 6" en flujo
                                 np.all(np.diff(valid_fluxes) > 0)):     # Monótonamente creciente
                                 
                                 try:
-                                    # Convertir a magnitudes solo para las aperturas de interés
+                                    # Convertir a magnitudes
                                     mag_2arcsec = -2.5 * np.log10(valid_fluxes[0])  # 2"
                                     mag_3arcsec = -2.5 * np.log10(valid_fluxes[1])  # 3" 
                                     mag_6arcsec = -2.5 * np.log10(valid_fluxes[-1]) # 6"
@@ -194,35 +192,43 @@ def process_single_filter_robust(args):
                                             aperture_corrections_3.append(correction_3)
                                             successful_gcs += 1
                                             
-                                            if debug:
+                                            if debug and successful_gcs <= 5:  # Log solo primeros 5 para no saturar
                                                 logging.debug(f"GC {i}: Δm_2 = {correction_2:.3f}, Δm_3 = {correction_3:.3f}")
                                     
                                 except Exception as e:
-                                    if debug:
+                                    if debug and i < 5:  # Log solo primeros errores
                                         logging.debug(f"Magnitude conversion failed for GC {i}: {e}")
                                     continue
                                     
                     except Exception as e:
-                        if debug:
+                        if debug and i < 5:  # Log solo primeros errores
                             logging.debug(f"Error in GC {i}: {e}")
                         continue
                 
                 logging.info(f"{filter_name}: Valid GCs for aperture correction: {successful_gcs}/{len(isolated_positions)}")
                 
-                if len(aperture_corrections_2) >= 2:  # Mínimo 2 GCs consistentes
+                # ✅ CON 20 GCs, PODEMOS SER MÁS ESTRICTOS
+                min_valid_gcs = max(5, len(isolated_positions) // 4)  # Mínimo 5 o 25% de los GCs
+                
+                if len(aperture_corrections_2) >= min_valid_gcs:
                     final_correction_2 = np.median(aperture_corrections_2)
                     final_correction_3 = np.median(aperture_corrections_3)
                     
-                    # ✅ VERIFICACIÓN FINAL DE CONSISTENCIA
-                    if abs(final_correction_2) > 0.8 or abs(final_correction_3) > 0.5:
-                        logging.warning(f"{filter_name}: Corrections too large, using defaults")
+                    # Calcular dispersión
+                    std_correction_2 = np.std(aperture_corrections_2)
+                    std_correction_3 = np.std(aperture_corrections_3)
+                    
+                    # ✅ VERIFICACIÓN DE CALIDAD CON MÁS GCs
+                    if (abs(final_correction_2) > 0.8 or abs(final_correction_3) > 0.5 or
+                        std_correction_2 > 0.2 or std_correction_3 > 0.15):  # Dispersión más estricta
+                        logging.warning(f"{filter_name}: Corrections too large/inconsistent (std_2={std_correction_2:.3f}, std_3={std_correction_3:.3f}), using defaults")
                         return default_corrections.get(filter_name, (-0.15, -0.07))
                     
-                    logging.info(f"{filter_name}: Aperture correction 2\" = {final_correction_2:.3f} mag, "
-                               f"3\" = {final_correction_3:.3f} mag")
+                    logging.info(f"{filter_name}: Aperture correction 2\" = {final_correction_2:.3f} ± {std_correction_2:.3f} mag, "
+                               f"3\" = {final_correction_3:.3f} ± {std_correction_3:.3f} mag (based on {len(aperture_corrections_2)} GCs)")
                     return final_correction_2, final_correction_3
                 else:
-                    logging.warning(f"{filter_name}: Using default aperture corrections")
+                    logging.warning(f"{filter_name}: Only {len(aperture_corrections_2)} valid GCs (min required: {min_valid_gcs}), using default corrections")
                     return default_corrections.get(filter_name, (-0.15, -0.07))
                     
             except Exception as e:
@@ -302,11 +308,11 @@ def process_single_filter_robust(args):
         data_unsharp = create_unsharp_mask(data_original, median_box_size, gaussian_sigma)
         logging.info(f"✅ {filter_name}: Unsharp masking applied")
 
-        # ✅ 2. CALCULAR CORRECCIÓN DE APERTURA ROBUSTA
-        aperture_correction_2, aperture_correction_3 = calculate_aperture_correction_robust(
+        # ✅ 2. CALCULAR CORRECCIÓN DE APERTURA CON 20 GCs AISLADOS
+        aperture_correction_2, aperture_correction_3 = calculate_aperture_correction_20_isolated(
             isolated_positions, data_unsharp, filter_name, pixel_scale, debug)
 
-        # ✅ 3. FOTOMETRÍA CON CORRECCIONES MÁS FÍSICAS
+        # ✅ 3. FOTOMETRÍA
         aperture_diams = [2.0, 3.0]
         results = {'indices': valid_indices}
         
@@ -362,7 +368,7 @@ def process_single_filter_robust(args):
         traceback.print_exc()
         return None, filter_name
 
-class SPLUSGCPhotometryBuzzoRobust:
+class SPLUSGCPhotometryBuzzo20Isolated:
     def __init__(self, catalog_path, zeropoints_file, debug=False, n_workers=None):
         if not os.path.exists(catalog_path):
             raise FileNotFoundError(f"Catalog file {catalog_path} does not exist")
@@ -402,28 +408,52 @@ class SPLUSGCPhotometryBuzzoRobust:
         if not self.id_col:
             raise ValueError("Catalog must contain ID column")
         
-        logging.info(f"Using ROBUST Buzzo method with physical aperture corrections")
+        logging.info(f"Using 20 ISOLATED GCs method for robust aperture correction")
 
-    def find_isolated_gcs(self, positions, image_shape, n_isolated=5):
-        """Encontrar GCs aislados para corrección de apertura"""
+    def find_isolated_gcs(self, positions, image_shape, n_isolated=20):
+        """
+        ✅ ENCONTRAR 20 GCs AISLADOS (O MÁXIMO POSIBLE)
+        """
         try:
             height, width = image_shape
-            margin = 0.15
             
+            # ✅ ESTRATEGIA PARA MAXIMIZAR GCs AISLADOS:
+            # 1. Primero buscar en regiones muy externas (20% del borde)
+            margin_outer = 0.20
             center_x, center_y = width / 2, height / 2
             distances = np.sqrt((positions[:, 0] - center_x)**2 + (positions[:, 1] - center_y)**2)
-            
             max_distance = np.max(distances)
-            isolated_mask = distances > (1 - margin) * max_distance
             
-            isolated_positions = positions[isolated_mask]
+            isolated_mask_outer = distances > (1 - margin_outer) * max_distance
+            isolated_positions_outer = positions[isolated_mask_outer]
             
-            if len(isolated_positions) > n_isolated:
-                isolated_distances = distances[isolated_mask]
+            # 2. Si no hay suficientes, relajar criterio a 15%
+            if len(isolated_positions_outer) < n_isolated:
+                margin_middle = 0.15
+                isolated_mask_middle = distances > (1 - margin_middle) * max_distance
+                isolated_positions_middle = positions[isolated_mask_middle]
+                
+                # Combinar posiciones únicas
+                all_isolated = np.unique(np.vstack([isolated_positions_outer, isolated_positions_middle]), axis=0)
+            else:
+                all_isolated = isolated_positions_outer
+            
+            # 3. Si todavía no hay suficientes, usar 10%
+            if len(all_isolated) < n_isolated:
+                margin_inner = 0.10
+                isolated_mask_inner = distances > (1 - margin_inner) * max_distance
+                isolated_positions_inner = positions[isolated_mask_inner]
+                all_isolated = np.unique(np.vstack([all_isolated, isolated_positions_inner]), axis=0)
+            
+            # 4. Ordenar por distancia (más lejanos primero) y tomar hasta n_isolated
+            if len(all_isolated) > 0:
+                isolated_distances = np.sqrt((all_isolated[:, 0] - center_x)**2 + (all_isolated[:, 1] - center_y)**2)
                 sorted_indices = np.argsort(-isolated_distances)
-                isolated_positions = isolated_positions[sorted_indices[:n_isolated]]
+                isolated_positions = all_isolated[sorted_indices[:min(n_isolated, len(all_isolated))]]
+            else:
+                isolated_positions = np.array([])
             
-            logging.info(f"Selected {len(isolated_positions)} isolated GCs for aperture correction")
+            logging.info(f"Selected {len(isolated_positions)} isolated GCs for aperture correction (target: {n_isolated})")
             return isolated_positions
             
         except Exception as e:
@@ -466,9 +496,9 @@ class SPLUSGCPhotometryBuzzoRobust:
         c2 = SkyCoord(ra=field_ra*u.deg, dec=field_dec*u.deg)
         return c1.separation(c2).degree <= radius
 
-    def process_field_robust(self, field_name):
-        """Procesar campo completo - VERSIÓN ROBUSTA"""
-        logging.info(f"🎯 Processing field {field_name} (ROBUST METHOD - {self.n_workers} workers)")
+    def process_field_20_isolated(self, field_name):
+        """Procesar campo completo - CON 20 GCs AISLADOS"""
+        logging.info(f"🎯 Processing field {field_name} (20 ISOLATED GCs METHOD - {self.n_workers} workers)")
         
         start_time = time.time()
         
@@ -542,10 +572,10 @@ class SPLUSGCPhotometryBuzzoRobust:
 
         logging.info(f"Valid positions for photometry: {len(valid_positions)}")
 
-        # ✅ IDENTIFICAR GCs AISLADOS
-        isolated_positions = self.find_isolated_gcs(valid_positions, (height, width))
+        # ✅ IDENTIFICAR 20 GCs AISLADOS
+        isolated_positions = self.find_isolated_gcs(valid_positions, (height, width), n_isolated=20)
 
-        # ✅ PROCESAMIENTO ROBUSTO
+        # ✅ PROCESAMIENTO CON 20 GCs AISLADOS
         results_df = field_sources.copy()
         successful_filters = 0
         
@@ -570,7 +600,7 @@ class SPLUSGCPhotometryBuzzoRobust:
         if self.n_workers > 1:
             try:
                 with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
-                    futures = [executor.submit(process_single_filter_robust, args) for args in args_list]
+                    futures = [executor.submit(process_single_filter_20_isolated, args) for args in args_list]
                     
                     for future in as_completed(futures):
                         try:
@@ -601,7 +631,7 @@ class SPLUSGCPhotometryBuzzoRobust:
         """Procesamiento serial"""
         successful_filters = 0
         for args in tqdm(args_list, desc="Processing filters"):
-            result, filter_name = process_single_filter_robust(args)
+            result, filter_name = process_single_filter_20_isolated(args)
             if result is not None:
                 self._integrate_results(results_df, result, filter_name)
                 successful_filters += 1
@@ -630,8 +660,8 @@ def main():
     test_mode = True
     fields = ['CenA01'] if test_mode else [f'CenA{i:02d}' for i in range(1, 25)]
     
-    # Crear instancia robusta
-    photometry = SPLUSGCPhotometryBuzzoRobust(
+    # Crear instancia con 20 GCs aislados
+    photometry = SPLUSGCPhotometryBuzzo20Isolated(
         catalog_path=catalog_path,
         zeropoints_file=zeropoints_file,
         debug=True,
@@ -640,11 +670,11 @@ def main():
     
     all_results = []
     for field in tqdm(fields, desc="Processing fields"):
-        results = photometry.process_field_robust(field)
+        results = photometry.process_field_20_isolated(field)
         if results is not None and len(results) > 0:
             all_results.append(results)
             
-            output_file = f'{field}_gc_photometry_robust.csv'
+            output_file = f'{field}_gc_photometry_20_isolated.csv'
             results.to_csv(output_file, index=False)
             logging.info(f"✅ Saved {field} results to {output_file}")
             
@@ -663,12 +693,12 @@ def main():
     
     if all_results:
         final_results = pd.concat(all_results, ignore_index=True)
-        output_file = 'Results/all_fields_gc_photometry_robust.csv'
+        output_file = 'Results/all_fields_gc_photometry_20_isolated.csv'
         final_results.to_csv(output_file, index=False)
         logging.info(f"🎉 Final catalog saved: {output_file}")
         
         # Estadísticas finales
-        logging.info("\n📊 ESTADÍSTICAS FINALES (ROBUST METHOD):")
+        logging.info("\n📊 ESTADÍSTICAS FINALES (20 ISOLATED GCs METHOD):")
         for filter_name in photometry.filters:
             for aperture in ['2', '3']:
                 mag_col = f'MAG_{filter_name}_{aperture}'
