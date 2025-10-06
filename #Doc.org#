@@ -574,6 +574,22 @@ python Splus_photometry_final.py
 I decided to apply de unsharc masking and aperture correctio
 similar to Buzzeo et al. 2022. Here the texto:
 
+A new method to detect globular clusters with the S-PLUS survey
+Maria Luisa Buzzo ,1,2 ‹ Arianna Cortesi,3,4 Duncan A. Forbes,1 Jean P. Brodie,1,5 Warrick J. Couch,1
+Carlos Eduardo Barbosa,2 Danielle de Brito Silva,6 Paula Coelho ,2 Ana L. Chies-Santos ,7,8
+Carlos Escudero ,9,10 Leandro Sesto,9,10 Kar´ın Men ´endez-Delmestre,3 Thiago S. Gonc¸alves,3
+Cl ´ecio R. Bom,4,11 Alvaro Alvarez-Candal ,12,13,14 Anal´ıa V. Smith Castelli
+
+A B S T R A C T
+In this paper, we describe a new method to select globular cluster (GC) candidates, including galaxy subtraction with unsharp
+masking, template fitting techniques, and the inclusion of Gaia’s proper motions. We report the use of the 12-band photometric sys-
+tem used by S-PLUS to determine radial velocities and stellar populations of GCs around nearby galaxies. Specifically, we assess
+the effectiveness of identifying GCs around nearby and massive galaxies (D < 20 Mpc and σ > 200 km s-1 ) in a multiband survey
+such as S-PLUS by using spectroscopically confirmed GCs and literature GC candidate lists around the bright central galaxy in the
+Fornax cluster, NGC 1399 (D = 19 Mpc), and the isolated lenticular galaxy NGC 3115 (D = 9.4 Mpc). Despite the shallow survey
+depth, which limits this work to r < 21.3 mag, we measure reliable photometry and perform robust SED fitting for a sample of 115
+GCs around NGC 1399 and 42 GCs around NGC 3115, recovering radial velocities, ages, and metallicities for the GC populations
+
 Galaxy subtraction
 We compare three methods to perform galaxy–light subtraction, an
 important step to identify and reliably obtain photometry of GCs that
@@ -627,8 +643,7 @@ of GC candidates.
 But I think that the for aperture correction is better used
 reference stars instead GCs. Ester very well comportadas.
 
-- I added a script to generate plots with original images
-  and the unsharp masking applied.
+
   
 
  #+BEGIN_SRC sh

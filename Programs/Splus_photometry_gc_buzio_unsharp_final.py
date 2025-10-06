@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
 Splus_photometry_gc_scientific_v17_optimized.py
-VERSIÓN OPTIMIZADA BASADA EN RESULTADOS EMPÍRICOS
+VERSIÓN CORREGIDA: Resta de galaxia para fotometría precisa de cúmulos globulares
 - Apertura principal: 2 arcsec (mejor coherencia con Taylor)
 - Meseta realista: 4-6 arcsec (no 8 arcsec)
 - Parámetros optimizados basados en análisis comparativo
+- RESTA DE GALAXIA: Aplicada a todos los campos para fotometría de GCs
+- DIAGNÓSTICO: Imágenes guardadas para F660 y F861 en campos seleccionados
+- CORRECCIONES APLICADAS: Cálculo científico preciso de fondo y errores
 """
 
 import numpy as np
@@ -56,10 +59,15 @@ class SPLUSPhotometryConfig:
         self.max_aperture_correction = 1.0
         self.filters = ['F378', 'F395', 'F410', 'F430', 'F515', 'F660', 'F861']
         
-        # Parámetros de unsharp masking
-        self.unsharp_median_box_size = 25
-        self.unsharp_gaussian_sigma = 3
-        self.unsharp_strength = 0.2
+        # PARÁMETROS PARA RESTA DE GALAXIA (Buzzeo et al. 2022)
+        self.median_box_size = 25  # 25x25 pixels median box
+        self.gaussian_sigma = 5    # Gaussian smoothing with σ=5 pixels
+        
+        # CONFIGURACIÓN DIAGNÓSTICO
+        self.save_diagnostic_images = True
+        self.diagnostic_dir = "galaxy_subtraction_diagnostics"
+        self.diagnostic_fields = ['CenA01', 'CenA11', 'CenA12']  # Campos para diagnóstico
+        self.diagnostic_filters = ['F660', 'F861']  # Filtros para diagnóstico
         
         # PARÁMETROS OPTIMIZADOS: crecimiento hasta 6" (no 10")
         self.growth_curve_radii = np.array([1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0])
@@ -88,77 +96,142 @@ def extract_header_information(header):
     
     return info
 
-def analyze_galaxy_structure_splus(data, header_info):
+def subtract_galaxy_background(data, median_box_size=25, gaussian_sigma=5):
     """
-    Análisis para S-PLUS con fondos restados
+    RESTA EL FONDO GALÁCTICO para aislar cúmulos globulares y estrellas
+    Método CORRECTO: data - smoothed (como en Buzzeo et al. 2022)
     """
     try:
-        data_array = np.asarray(data, dtype=float)
+        # Paso 1: Aplicar filtro de mediana para eliminar fuentes puntuales
+        median_filtered = median_filter(data, size=median_box_size)
         
-        # Para S-PLUS con fondo restado, usar análisis absoluto
-        data_positive = data_array - np.min(data_array) + 1.0
+        # Paso 2: Aplicar suavizado gaussiano para obtener el fondo galáctico
+        galaxy_background = gaussian_filter(median_filtered, sigma=gaussian_sigma)
         
-        # Estadísticas en datos positivos
-        p10, p50, p90 = np.percentile(data_positive, [10, 50, 90])
-        iqr = p90 - p10
+        # Paso 3: CORRECTO - Restar el fondo galáctico de la imagen original
+        residual_image = data - galaxy_background
         
-        # Calcular gradientes
-        grad_y, grad_x = np.gradient(data_positive)
-        total_gradient = np.sqrt(grad_x**2 + grad_y**2)
+        logging.info(f"✅ GALAXY SUBTRACTION: "
+                   f"median_box={median_box_size}, gaussian_sigma={gaussian_sigma}")
         
-        gradient_measure = np.percentile(total_gradient, 50)
-        normalized_gradient = gradient_measure / p50 if p50 > 0 else 0.0
-        
-        # Calcular asimetría
-        background_mask = (data_positive >= p10) & (data_positive <= p90)
-        background_data = data_positive[background_mask]
-        
-        if len(background_data) > 0:
-            background_std = np.std(background_data)
-            if background_std > 0:
-                skewness = np.mean(((background_data - p50) / background_std) ** 3)
-            else:
-                skewness = 0.0
-        else:
-            skewness = 0.0
-        
-        # Criterios para S-PLUS
-        needs_unsharp = (normalized_gradient > 0.05 and
-                        abs(skewness) > 0.2 and
-                        iqr > np.median(data_positive) * 0.1)
-        
-        reason = f"gradient_{normalized_gradient:.3f}_skewness_{skewness:.3f}_iqr_{iqr:.3f}"
-        
-        logging.info(f"S-PLUS galaxy analysis: normalized_gradient={normalized_gradient:.3f}, "
-                    f"skewness={skewness:.3f}, iqr={iqr:.3f}, unsharp_needed={needs_unsharp}")
-        
-        return needs_unsharp, normalized_gradient, reason
+        return residual_image, galaxy_background, median_filtered
         
     except Exception as e:
-        logging.warning(f"S-PLUS galaxy analysis failed: {e}")
-        return False, 0.0, "analysis_failed"
+        logging.error(f"Error in galaxy subtraction: {e}")
+        return data, np.zeros_like(data), data
 
-def create_conservative_unsharp_mask(data, median_box_size=25, gaussian_sigma=3, strength=0.2):
+def save_diagnostic_images(original_data, residual_data, galaxy_background, header, field_name, filter_name):
     """
-    Unsharp masking conservador para S-PLUS
+    Guarda imágenes de diagnóstico: original, residual y fondo galáctico
     """
     try:
-        data_positive = data - np.min(data) + 1.0
+        # Verificar si debemos guardar diagnóstico para este campo y filtro
+        if (not config.save_diagnostic_images or 
+            field_name not in config.diagnostic_fields or
+            filter_name not in config.diagnostic_filters):
+            return
         
-        median_filtered = median_filter(data_positive, size=median_box_size)
-        gaussian_smoothed = gaussian_filter(median_filtered, sigma=gaussian_sigma)
+        # Crear directorio de diagnóstico
+        diagnostic_dir = Path(config.diagnostic_dir) / field_name
+        diagnostic_dir.mkdir(parents=True, exist_ok=True)
         
-        structure_component = data_positive - gaussian_smoothed
-        unsharp_positive = data_positive - (structure_component * strength)
-        unsharp_mask = unsharp_positive + np.min(data) - 1.0
+        # 1. Guardar imagen ORIGINAL
+        original_path = diagnostic_dir / f"{field_name}_{filter_name}_original.fits"
+        fits.writeto(original_path, original_data, header, overwrite=True)
         
-        logging.info(f"Conservative unsharp masking: box={median_box_size}, sigma={gaussian_sigma}, strength={strength}")
+        # 2. Guardar imagen RESIDUAL (después de restar galaxia)
+        residual_path = diagnostic_dir / f"{field_name}_{filter_name}_residual.fits"
         
-        return unsharp_mask
+        # Actualizar header con información de procesamiento
+        new_header = header.copy()
+        new_header['HISTORY'] = f'Processed by SPLUS pipeline v17 - Galaxy Subtraction'
+        new_header['HISTORY'] = f'Median box: {config.median_box_size}'
+        new_header['HISTORY'] = f'Gaussian sigma: {config.gaussian_sigma}'
+        new_header['PROCTYPE'] = 'residual'
+        
+        fits.writeto(residual_path, residual_data, new_header, overwrite=True)
+        
+        # 3. Guardar fondo galáctico
+        background_path = diagnostic_dir / f"{field_name}_{filter_name}_background.fits"
+        bg_header = header.copy()
+        bg_header['PROCTYPE'] = 'galaxy_background'
+        fits.writeto(background_path, galaxy_background, bg_header, overwrite=True)
+        
+        # 4. Crear plot comparativo
+        create_comparison_plot(original_data, residual_data, galaxy_background, field_name, filter_name, diagnostic_dir)
+        
+        logging.info(f"📁 GALAXY SUBTRACTION DIAGNOSTIC: Images saved for {field_name} {filter_name}")
+        logging.info(f"   Original: {original_path}")
+        logging.info(f"   Residual: {residual_path}")
+        logging.info(f"   Background: {background_path}")
         
     except Exception as e:
-        logging.error(f"Error in conservative unsharp masking: {e}")
-        return data
+        logging.error(f"Error saving galaxy subtraction diagnostic images: {e}")
+
+def create_comparison_plot(original, residual, background, field_name, filter_name, output_dir):
+    """
+    Crea un plot comparativo entre original, residual y fondo
+    """
+    try:
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        
+        fig.suptitle(f'Galaxy Subtraction - {field_name} {filter_name}\n'
+                    f'Median box: {config.median_box_size}, Gaussian σ: {config.gaussian_sigma}', 
+                    fontsize=12, fontweight='bold')
+        
+        # Usar percentiles para escalado consistente
+        vmin, vmax = np.percentile(original, [5, 95])
+        
+        # 1. Imagen original
+        im1 = axes[0, 0].imshow(original, cmap='viridis', vmin=vmin, vmax=vmax, origin='lower')
+        axes[0, 0].set_title('Original Image')
+        plt.colorbar(im1, ax=axes[0, 0], fraction=0.046)
+        
+        # 2. Fondo galáctico
+        im2 = axes[0, 1].imshow(background, cmap='viridis', vmin=vmin, vmax=vmax, origin='lower')
+        axes[0, 1].set_title('Galaxy Background')
+        plt.colorbar(im2, ax=axes[0, 1], fraction=0.046)
+        
+        # 3. Imagen residual (original - fondo)
+        im3 = axes[0, 2].imshow(residual, cmap='viridis', vmin=vmin, vmax=vmax, origin='lower')
+        axes[0, 2].set_title('Residual (Original - Background)')
+        plt.colorbar(im3, ax=axes[0, 2], fraction=0.046)
+        
+        # 4. Histograma de valores originales
+        axes[1, 0].hist(original.flatten(), bins=100, alpha=0.7, color='blue', label='Original')
+        axes[1, 0].set_xlabel('Pixel Value')
+        axes[1, 0].set_ylabel('Count')
+        axes[1, 0].set_title('Original Image Histogram')
+        axes[1, 0].legend()
+        axes[1, 0].grid(True, alpha=0.3)
+        
+        # 5. Histograma de valores residuales
+        axes[1, 1].hist(residual.flatten(), bins=100, alpha=0.7, color='red', label='Residual')
+        axes[1, 1].axvline(0, color='black', linestyle='--', linewidth=1)
+        axes[1, 1].set_xlabel('Pixel Value')
+        axes[1, 1].set_ylabel('Count')
+        axes[1, 1].set_title('Residual Image Histogram')
+        axes[1, 1].legend()
+        axes[1, 1].grid(True, alpha=0.3)
+        
+        # 6. Histograma de fondos
+        axes[1, 2].hist(background.flatten(), bins=100, alpha=0.7, color='green', label='Background')
+        axes[1, 2].set_xlabel('Pixel Value')
+        axes[1, 2].set_ylabel('Count')
+        axes[1, 2].set_title('Background Histogram')
+        axes[1, 2].legend()
+        axes[1, 2].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        plot_path = output_dir / f"{field_name}_{filter_name}_galaxy_subtraction_comparison.png"
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        logging.info(f"📊 GALAXY SUBTRACTION DIAGNOSTIC: Comparison plot saved: {plot_path}")
+        
+    except Exception as e:
+        logging.warning(f"Could not create galaxy subtraction comparison plot: {e}")
 
 def detect_reference_stars_daofind_corrected(data, error_map, header, nstars=30):
     """
@@ -684,12 +757,12 @@ def robust_sigma_clipped_stats(data, sigma=3.0, maxiters=5):
             return 0.0, 0.0, 1.0
 
 def process_single_filter_splus_optimized(args):
-    """Procesamiento OPTIMIZADO para S-PLUS con parámetros realistas"""
+    """Procesamiento OPTIMIZADO para S-PLUS con resta de galaxia y correcciones científicas"""
     try:
         (field_name, filter_name, valid_positions, valid_indices, 
          zeropoints, debug) = args
         
-        logging.info(f"🔬 {filter_name}: Starting OPTIMIZED S-PLUS processing")
+        logging.info(f"🔬 {filter_name}: Starting SCIENTIFIC S-PLUS processing with corrections")
         
         def find_splus_file(field_name, filter_name, file_type='image'):
             patterns = {
@@ -748,30 +821,37 @@ def process_single_filter_splus_optimized(args):
         valid_positions = valid_positions[valid_mask]
         valid_indices = valid_indices[valid_mask]
         
-        # Análisis de galaxia
-        needs_unsharp, gradient_variability, reason = analyze_galaxy_structure_splus(
-            data_original, header_info)
+        # APLICAR RESTA DE GALAXIA A TODOS LOS CAMPOS
+        data_residual, galaxy_background, _ = subtract_galaxy_background(
+            data_original,
+            median_box_size=config.median_box_size,
+            gaussian_sigma=config.gaussian_sigma
+        )
         
-        if needs_unsharp:
-            data_processed = create_conservative_unsharp_mask(data_original)
-            logging.info(f"✅ {filter_name}: S-PLUS unsharp masking applied")
-        else:
-            data_processed = data_original
-            logging.info(f"✅ {filter_name}: No unsharp masking needed")
+        logging.info(f"✅ {filter_name}: GALAXY SUBTRACTION applied to {field_name}")
         
-        # Detección de estrellas CORREGIDA
-        reference_stars = detect_reference_stars_daofind_corrected(data_processed, error_map, header)
+        # GUARDAR IMÁGENES DE DIAGNÓSTICO para F660 y F861 en campos seleccionados
+        save_diagnostic_images(data_original, data_residual, galaxy_background, header, field_name, filter_name)
+        
+        # Para DETECCIÓN y FOTOMETRÍA usar imagen RESIDUAL (después de restar galaxia)
+        data_for_detection = data_residual
+        data_for_photometry = data_residual
+        
+        logging.info(f"📊 {filter_name}: Using RESIDUAL data for GC detection and photometry")
+        
+        # Detección de estrellas CORREGIDA (usar data_for_detection residual)
+        reference_stars = detect_reference_stars_daofind_corrected(data_for_detection, error_map, header)
         
         if len(reference_stars) < config.min_reference_stars:
-            # Fallback: usar GCs brillantes
+            # Fallback: usar GCs brillantes para referencia
             fluxes = []
             test_radius = header_info['seeing_fwhm'] / header_info['pixel_scale']
             for pos in valid_positions[:20]:
                 try:
-                    if (pos[0] >= test_radius and pos[0] < data_processed.shape[1] - test_radius and
-                        pos[1] >= test_radius and pos[1] < data_processed.shape[0] - test_radius):
+                    if (pos[0] >= test_radius and pos[0] < data_for_detection.shape[1] - test_radius and
+                        pos[1] >= test_radius and pos[1] < data_for_detection.shape[0] - test_radius):
                         aperture = CircularAperture([pos], r=test_radius)
-                        phot = aperture_photometry(data_processed, aperture)
+                        phot = aperture_photometry(data_for_detection, aperture)
                         flux = abs(phot['aperture_sum'].data[0])
                         fluxes.append(flux)
                     else:
@@ -786,20 +866,20 @@ def process_single_filter_splus_optimized(args):
             else:
                 logging.warning("No bright sources found for reference")
         
-        # ANÁLISIS DE CRECIMIENTO OPTIMIZADO (4-6 arcsec)
+        # ANÁLISIS DE CRECIMIENTO OPTIMIZADO (4-6 arcsec) - Usar datos RESIDUALES
         if len(reference_stars) > 0:
             analysis_positions = reference_stars
         else:
             analysis_positions = valid_positions[:min(15, len(valid_positions))]
             
         recommended_aperture, growth_diagnostics = analyze_growth_curves_realistic(
-            analysis_positions, data_processed, error_map, header)
+            analysis_positions, data_for_photometry, error_map, header)
         
-        # CORRECCIÓN DE APERTURA OPTIMIZADA (referencia 6")
+        # CORRECCIÓN DE APERTURA OPTIMIZADA (referencia 6") - Usar datos RESIDUALES
         aperture_correction_2, aperture_correction_3, ap_diagnostics = \
-            calculate_aperture_correction_robust(reference_stars, data_processed, header)
+            calculate_aperture_correction_robust(reference_stars, data_for_photometry, header)
         
-        # Fotometría de GCs
+        # Fotometría de GCs - Usar datos RESIDUALES (data_for_photometry) con CORRECCIONES CIENTÍFICAS
         results = {'indices': valid_indices}
         pixel_scale = header_info['pixel_scale']
         zero_point = zeropoints.get(field_name, {}).get(filter_name, 0.0)
@@ -810,16 +890,16 @@ def process_single_filter_splus_optimized(args):
             annulus_outer = (config.annulus_outer / 2) / pixel_scale
             
             # Filtrar posiciones válidas
-            valid_for_photometry = []
+            valid_for_photometry_mask = []
             for pos in valid_positions:
-                if (pos[0] >= aperture_radius and pos[0] < data_processed.shape[1] - aperture_radius and
-                    pos[1] >= aperture_radius and pos[1] < data_processed.shape[0] - aperture_radius):
-                    valid_for_photometry.append(True)
+                if (pos[0] >= aperture_radius and pos[0] < data_for_photometry.shape[1] - aperture_radius and
+                    pos[1] >= aperture_radius and pos[1] < data_for_photometry.shape[0] - aperture_radius):
+                    valid_for_photometry_mask.append(True)
                 else:
-                    valid_for_photometry.append(False)
+                    valid_for_photometry_mask.append(False)
             
-            valid_for_photometry = np.array(valid_for_photometry)
-            if np.sum(valid_for_photometry) == 0:
+            valid_for_photometry_mask = np.array(valid_for_photometry_mask)
+            if np.sum(valid_for_photometry_mask) == 0:
                 n_sources = len(valid_positions)
                 prefix = f"{filter_name}_{aperture_diam:.0f}"
                 results[f'FLUX_{prefix}'] = np.full(n_sources, 0.0)
@@ -829,35 +909,47 @@ def process_single_filter_splus_optimized(args):
                 results[f'SNR_{prefix}'] = np.full(n_sources, 0.0)
                 continue
             
-            filtered_positions = valid_positions[valid_for_photometry]
+            filtered_positions = valid_positions[valid_for_photometry_mask]
             
             apertures = CircularAperture(filtered_positions, r=aperture_radius)
             annulus = CircularAnnulus(filtered_positions, r_in=annulus_inner, r_out=annulus_outer)
             
-            # Fotometría
-            phot_table = aperture_photometry(data_processed, apertures, error=error_map)
+            # FOTOMETRÍA CON DATOS RESIDUALES Y CORRECCIONES CIENTÍFICAS
+            phot_table = aperture_photometry(data_for_photometry, apertures, error=error_map)
             raw_flux = phot_table['aperture_sum'].data
             raw_flux_err = phot_table['aperture_sum_err'].data
             
-            # Estimación de fondo
-            bkg_means = np.zeros(len(filtered_positions))
+            # CORRECCIÓN: Cálculo científico preciso del fondo y errores
+            bkg_medians = np.zeros(len(filtered_positions))
+            bkg_stds = np.zeros(len(filtered_positions))
+            
             for i, pos in enumerate(filtered_positions):
                 try:
                     mask = annulus.to_mask(method='center')[i]
-                    annulus_data = mask.multiply(data_processed)
+                    annulus_data = mask.multiply(data_for_photometry)
                     annulus_data_1d = annulus_data[mask.data > 0]
+                    
                     if len(annulus_data_1d) > 5:
-                        bkg_median = np.median(np.abs(annulus_data_1d))
+                        # CORRECCIÓN: Usar valores REALES, no absolutos
+                        bkg_median = np.median(annulus_data_1d)
+                        bkg_std = np.std(annulus_data_1d)
                     else:
                         bkg_median = 0.0
+                        bkg_std = 0.0
                 except:
                     bkg_median = 0.0
-                bkg_means[i] = bkg_median
+                    bkg_std = 0.0
+                
+                bkg_medians[i] = bkg_median
+                bkg_stds[i] = bkg_std
             
-            net_flux = np.abs(raw_flux - (bkg_means * apertures.area))
-            net_flux_err = np.sqrt(raw_flux_err**2 + (bkg_means * np.sqrt(apertures.area))**2)
+            # CORRECCIÓN: Flujo neto sin valor absoluto
+            net_flux = raw_flux - (bkg_medians * apertures.area)
             
-            # Cálculo de magnitudes
+            # CORRECCIÓN: Error más realista usando desviación estándar
+            net_flux_err = np.sqrt(raw_flux_err**2 + (bkg_stds**2 * apertures.area))
+            
+            # Cálculo de magnitudes (solo para flujos positivos y válidos)
             snr = np.where(net_flux_err > 0, net_flux / net_flux_err, 0.0)
             valid_flux = (net_flux > 1e-10) & (net_flux_err > 0) & np.isfinite(net_flux)
             
@@ -880,11 +972,11 @@ def process_single_filter_splus_optimized(args):
             full_mag_err = np.full(n_total, 99.0)
             full_snr = np.full(n_total, 0.0)
             
-            full_flux[valid_for_photometry] = net_flux
-            full_flux_err[valid_for_photometry] = net_flux_err
-            full_mag[valid_for_photometry] = np.where(valid_flux, mag, 99.0)
-            full_mag_err[valid_for_photometry] = np.where(valid_flux, mag_err, 99.0)
-            full_snr[valid_for_photometry] = snr
+            full_flux[valid_for_photometry_mask] = net_flux
+            full_flux_err[valid_for_photometry_mask] = net_flux_err
+            full_mag[valid_for_photometry_mask] = np.where(valid_flux, mag, 99.0)
+            full_mag_err[valid_for_photometry_mask] = np.where(valid_flux, mag_err, 99.0)
+            full_snr[valid_for_photometry_mask] = snr
             
             prefix = f"{filter_name}_{aperture_diam:.0f}"
             results[f'FLUX_{prefix}'] = full_flux
@@ -896,12 +988,14 @@ def process_single_filter_splus_optimized(args):
         
         valid_measurements = np.sum([np.sum(results[f'SNR_{filter_name}_{ap:.0f}'] > 0) 
                                    for ap in config.aperture_diams])
-        logging.info(f"✅ {filter_name}: OPTIMIZED processing completed - {valid_measurements} valid measurements")
+        
+        logging.info(f"✅ {filter_name}: SCIENTIFIC processing completed - "
+                   f"{valid_measurements} valid measurements with corrected background estimation")
         
         return results, filter_name
         
     except Exception as e:
-        logging.error(f"❌ {filter_name}: OPTIMIZED PROCESSING FAILED: {e}")
+        logging.error(f"❌ {filter_name}: SCIENTIFIC PROCESSING FAILED: {e}")
         traceback.print_exc()
         return None, filter_name
 
@@ -954,10 +1048,14 @@ class SPLUSGCScientificPhotometryOptimized:
         if not self.id_col:
             raise ValueError("Catalog must contain ID column")
             
-        logging.info("🎯 INITIALIZED OPTIMIZED S-PLUS SCIENTIFIC PHOTOMETRY PIPELINE v17")
+        logging.info("🎯 INITIALIZED SCIENTIFIC S-PLUS PHOTOMETRY PIPELINE v17")
         logging.info("   - APERTURE PRINCIPAL: 2 arcsec (mejor coherencia con Taylor)")
         logging.info("   - MESETA REALISTA: 4-6 arcsec (no 8 arcsec)")
         logging.info("   - CORRECCIÓN REFERENCIA: 6 arcsec")
+        logging.info("   - GALAXY SUBTRACTION: Aplicada a todos los campos para fotometría de GCs")
+        logging.info("   - CORRECCIONES CIENTÍFICAS: Background estimation sin np.abs()")
+        logging.info("   - ERRORES REALISTAS: Usando desviación estándar del fondo")
+        logging.info("   - DIAGNÓSTICO: Imágenes guardadas para F660/F861 en CenA01, CenA11, CenA12")
         logging.info("   - PARÁMETROS BASADOS EN ANÁLISIS EMPÍRICO")
     
     def find_splus_file(self, field_name, filter_name):
@@ -978,7 +1076,7 @@ class SPLUSGCScientificPhotometryOptimized:
     
     def process_field_optimized(self, field_name):
         """Procesamiento OPTIMIZADO basado en resultados empíricos"""
-        logging.info(f"🎯 Processing field {field_name} with OPTIMIZED parameters")
+        logging.info(f"🎯 Processing field {field_name} with SCIENTIFIC CORRECTIONS")
         start_time = time.time()
         
         if not os.path.exists(field_name):
@@ -1066,7 +1164,7 @@ class SPLUSGCScientificPhotometryOptimized:
                         if col != 'indices':
                             results_df.loc[temp_df.index, col] = temp_df[col].values
                     successful_filters += 1
-                    logging.info(f"✅ {filter_name}: OPTIMIZED results integrated")
+                    logging.info(f"✅ {filter_name}: SCIENTIFIC results integrated")
             except Exception as e:
                 logging.error(f"❌ Error processing {filt}: {e}")
                 continue
@@ -1074,8 +1172,10 @@ class SPLUSGCScientificPhotometryOptimized:
         if successful_filters > 0:
             results_df['FIELD'] = field_name
             results_df['PROCESSING_DATE'] = time.strftime('%Y-%m-%d %H:%M:%S')
-            results_df['PHOTOMETRY_METHOD'] = 'S-PLUS_OPTIMIZED_v17'
-            results_df['PRIMARY_APERTURE'] = '2 arcsec'  # Especificar apertura principal
+            results_df['PHOTOMETRY_METHOD'] = 'S-PLUS_SCIENTIFIC_v17_CORRECTED'
+            results_df['PRIMARY_APERTURE'] = '2 arcsec'
+            results_df['GALAXY_SUBTRACTION'] = 'APPLIED_FOR_PHOTOMETRY'
+            results_df['BACKGROUND_ESTIMATION'] = 'SCIENTIFIC_CORRECTED'
             
             # Validación de coherencia
             try:
@@ -1091,7 +1191,7 @@ class SPLUSGCScientificPhotometryOptimized:
                 logging.warning(f"Coherence validation failed for {field_name}: {e}")
             
             elapsed_time = time.time() - start_time
-            logging.info(f"🎯 OPTIMIZED field {field_name} completed: "
+            logging.info(f"🎯 SCIENTIFIC field {field_name} completed: "
                        f"{successful_filters}/{len(self.filters)} filters in {elapsed_time:.1f}s")
             return results_df
         else:
@@ -1100,8 +1200,13 @@ class SPLUSGCScientificPhotometryOptimized:
 def main():
     """Función principal OPTIMIZADA"""
     logging.info("=" * 80)
-    logging.info("🎯 S-PLUS GLOBULAR CLUSTER SCIENTIFIC PHOTOMETRY v17 OPTIMIZED")
+    logging.info("🎯 S-PLUS GLOBULAR CLUSTER SCIENTIFIC PHOTOMETRY v17 CORRECTED")
     logging.info("   BASADO EN RESULTADOS EMPÍRICOS: 2 arcsec + 4-6 arcsec meseta")
+    logging.info("   GALAXY SUBTRACTION: Aplicada a todos los campos para fotometría de GCs")
+    logging.info("   CORRECCIONES CIENTÍFICAS: Background estimation sin np.abs()")
+    logging.info("   ERRORES REALISTAS: Usando desviación estándar del fondo")
+    logging.info("   FOTOMETRÍA: Realizada en imágenes residuales (original - fondo galáctico)")
+    logging.info("   DIAGNÓSTICO: Imágenes guardadas para F660/F861 en CenA01, CenA11, CenA12")
     logging.info("=" * 80)
     
     catalog_path = '../TAP_1_J_MNRAS_3444_gc.csv'
@@ -1129,20 +1234,25 @@ def main():
         results = photometry.process_field_optimized(field)
         if results is not None and len(results) > 0:
             all_results.append(results)
-            output_file = f'{field}_gc_photometry_optimized_v17.csv'
+            output_file = f'{field}_gc_photometry_scientific_v17.csv'
             results.to_csv(output_file, index=False)
-            logging.info(f"✅ Saved {field} OPTIMIZED results to {output_file}")
+            logging.info(f"✅ Saved {field} SCIENTIFIC results to {output_file}")
     
     if all_results:
         final_results = pd.concat(all_results, ignore_index=True)
         os.makedirs("Results", exist_ok=True)
-        output_file = 'Results/all_fields_gc_photometry_optimized_v17.csv'
+        output_file = 'Results/all_fields_gc_photometry_scientific_v17.csv'
         final_results.to_csv(output_file, index=False)
         
-        logging.info("🎉 OPTIMIZED S-PLUS PHOTOMETRY COMPLETED SUCCESSFULLY")
+        logging.info("🎉 SCIENTIFIC S-PLUS PHOTOMETRY COMPLETED SUCCESSFULLY")
         logging.info("   ✅ APERTURE PRINCIPAL: 2 arcsec (mejor coherencia con Taylor)")
         logging.info("   ✅ MESETA REALISTA: 4-6 arcsec (basado en observación empírica)")
         logging.info("   ✅ CORRECCIÓN REFERENCIA: 6 arcsec (no 8 arcsec)")
+        logging.info("   ✅ GALAXY SUBTRACTION: Aplicada a todos los campos")
+        logging.info("   ✅ CORRECCIONES CIENTÍFICAS: Background estimation sin np.abs()")
+        logging.info("   ✅ ERRORES REALISTAS: Usando desviación estándar del fondo")
+        logging.info("   ✅ FOTOMETRÍA: Realizada en imágenes residuales (original - fondo)")
+        logging.info("   ✅ DIAGNÓSTICO: Imágenes guardadas en carpeta 'galaxy_subtraction_diagnostics'")
         logging.info("   ✅ PARÁMETROS OPTIMIZADOS BASADOS EN ANÁLISIS COMPARATIVO")
         logging.info(f"   📊 Final catalog: {output_file}")
 

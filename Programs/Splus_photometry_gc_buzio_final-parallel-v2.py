@@ -665,7 +665,7 @@ def main():
         catalog_path=catalog_path,
         zeropoints_file=zeropoints_file,
         debug=True,
-        n_workers=7
+        n_workers=2
     )
     
     all_results = []
