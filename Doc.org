@@ -26,7 +26,7 @@ Perform aperture photometry of globular clusters in NGC 5128 using data from the
 * Project Structure
 ** Main Directories
 .
-├── anac_data/                 # SPLUS data (by field)
+├── anac_data/            # SPLUS data (by field)
 ├── Programs/             # Python scripts
 ├── programss/            # Python scripts to do synthetic photometry
 ├── Results/             # Photometry results
@@ -638,7 +638,8 @@ reference stars instead GCs. Ester very well comportadas.
 
 #+END_SRC
 
-
+** Comments
+In the fields CenA04, CenA05, Cen08, CenA14, CenA15, CenA24 there is not sources from the catalog of Taylor.
 
 * Science
 

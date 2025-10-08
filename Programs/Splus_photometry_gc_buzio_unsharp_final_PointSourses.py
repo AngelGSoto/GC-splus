@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Splus_photometry_gc_scientific_v17_optimized.py
+Splus_photometry_gc_scientific_v17_PointSource.py
 VERSIÓN CORREGIDA: Resta de galaxia para fotometría precisa de cúmulos globulares
 - Apertura principal: 2 arcsec (mejor coherencia con Taylor)
 - Meseta realista: 4-6 arcsec (no 8 arcsec)
@@ -32,13 +32,14 @@ from scipy.spatial import KDTree
 from pathlib import Path
 from scipy.interpolate import interp1d
 import scipy.ndimage as ndimage
+import concurrent.futures  # AGREGADO para paralelización
 
 # Configuración de logging
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
-        logging.FileHandler('splus_scientific_photometry_v17_optimized.log'),
+        logging.FileHandler('splus_scientific_photometry_v17_optimized_PointSource.log'),
         logging.StreamHandler()
     ]
 )
@@ -670,9 +671,9 @@ def validate_aperture_coherence(photometry_results, taylor_catalog, aperture_dia
             if mag_col in photometry_results.columns and taylor_filter in taylor_catalog.columns:
                 # Combinar datos
                 merged_data = pd.merge(
-                    photometry_results[['T17ID', mag_col]], 
-                    taylor_catalog[['T17ID', taylor_filter]],
-                    on='T17ID', 
+                    photometry_results[['recno', mag_col]], 
+                    taylor_catalog[['recno', taylor_filter]],
+                    on='recno', 
                     how='inner'
                 )
                 
@@ -1044,7 +1045,7 @@ class SPLUSGCScientificPhotometryOptimized:
         if not self.ra_col or not self.dec_col:
             raise ValueError("Catalog must contain RA/DEC columns")
             
-        self.id_col = next((col for col in ['T17ID', 'ID', 'id'] if col in self.catalog.columns), None)
+        self.id_col = next((col for col in ['recno', 'ID', 'id'] if col in self.catalog.columns), None)
         if not self.id_col:
             raise ValueError("Catalog must contain ID column")
             
@@ -1145,7 +1146,9 @@ class SPLUSGCScientificPhotometryOptimized:
         results_df = field_sources.copy()
         
         successful_filters = 0
-        for filt in tqdm(self.filters, desc=f"Processing {field_name}"):
+        # ⚡ MODIFICACIÓN: Paralelización de filtros con ThreadPoolExecutor
+        args_list = []
+        for filt in self.filters:
             args = (
                 field_name, 
                 filt, 
@@ -1154,20 +1157,26 @@ class SPLUSGCScientificPhotometryOptimized:
                 self.zeropoints,
                 self.debug
             )
-            
-            try:
-                result, filter_name = process_single_filter_splus_optimized(args)
-                if result is not None:
-                    temp_df = pd.DataFrame(result)
-                    temp_df.set_index('indices', inplace=True)
-                    for col in temp_df.columns:
-                        if col != 'indices':
-                            results_df.loc[temp_df.index, col] = temp_df[col].values
-                    successful_filters += 1
-                    logging.info(f"✅ {filter_name}: SCIENTIFIC results integrated")
-            except Exception as e:
-                logging.error(f"❌ Error processing {filt}: {e}")
-                continue
+            args_list.append(args)
+        
+        # Usar ThreadPoolExecutor para procesar filtros en paralelo
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(self.filters)) as executor:
+            future_to_filter = {executor.submit(process_single_filter_splus_optimized, arg): arg[1] for arg in args_list}
+            for future in concurrent.futures.as_completed(future_to_filter):
+                filt = future_to_filter[future]
+                try:
+                    result, filter_name = future.result()
+                    if result is not None:
+                        temp_df = pd.DataFrame(result)
+                        temp_df.set_index('indices', inplace=True)
+                        for col in temp_df.columns:
+                            if col != 'indices':
+                                results_df.loc[temp_df.index, col] = temp_df[col].values
+                        successful_filters += 1
+                        logging.info(f"✅ {filter_name}: SCIENTIFIC results integrated (parallel)")
+                except Exception as e:
+                    logging.error(f"❌ Error processing {filt}: {e}")
+                    continue
         
         if successful_filters > 0:
             results_df['FIELD'] = field_name
@@ -1209,7 +1218,7 @@ def main():
     logging.info("   DIAGNÓSTICO: Imágenes guardadas para F660/F861 en CenA01, CenA11, CenA12")
     logging.info("=" * 80)
     
-    catalog_path = '../TAP_1_J_MNRAS_3444_gc.csv'
+    catalog_path = '../TAP_1_J_MNRAS_3444_psc.csv'
     zeropoints_file = 'Results/all_fields_zero_points_splus_format_3arcsec.csv'
     
     if not os.path.exists(catalog_path):
@@ -1235,14 +1244,14 @@ def main():
         results = photometry.process_field_optimized(field)
         if results is not None and len(results) > 0:
             all_results.append(results)
-            output_file = f'{field}_gc_photometry_scientific_v17.csv'
+            output_file = f'{field}_gc_photometry_scientific_v17_PointSource.csv'
             results.to_csv(output_file, index=False)
             logging.info(f"✅ Saved {field} SCIENTIFIC results to {output_file}")
     
     if all_results:
         final_results = pd.concat(all_results, ignore_index=True)
         os.makedirs("Results", exist_ok=True)
-        output_file = 'Results/all_fields_gc_photometry_scientific_v17.csv'
+        output_file = 'Results/all_fields_gc_photometry_scientific_v17_PointSource.csv'
         final_results.to_csv(output_file, index=False)
         
         logging.info("🎉 SCIENTIFIC S-PLUS PHOTOMETRY COMPLETED SUCCESSFULLY")
