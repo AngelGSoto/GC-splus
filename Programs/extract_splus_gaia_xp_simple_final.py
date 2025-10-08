@@ -400,7 +400,9 @@ def process_field_3arcsec(field_name):
 def main():
     """Función principal"""
     # Campos a procesar - ajusta según necesites
-    test_fields = ['CenA01', 'CenA02']
+    test_fields = ['CenA01', 'CenA02', 'CenA03', 'CenA04', 'CenA05', 'CenA06', 'CenA07', 'CenA08',
+                    'CenA09', 'CenA10', 'CenA11', 'CenA12', 'CenA13', 'CenA14', 'CenA15', 'CenA16',
+                    'CenA17', 'CenA18', 'CenA19', 'CenA20', 'CenA21', 'CenA22', 'CenA23', 'CenA24']
     
     successful_fields = []
     for field in test_fields:

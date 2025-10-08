@@ -1220,7 +1220,8 @@ def main():
     zp_df = pd.read_csv(zeropoints_file)
     logging.info(f"📊 Zeropoints file: {len(zp_df)} fields")
     
-    test_mode = True
+    # If you want run the test mode change it for True
+    test_mode = False
     fields = ['CenA01'] if test_mode else [f'CenA{i:02d}' for i in range(1, 25)]
     
     photometry = SPLUSGCScientificPhotometryOptimized(

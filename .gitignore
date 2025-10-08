@@ -32,6 +32,7 @@ tmp/
 temp/
 photospectra/
 photospectra_corrected/
+photospectra_flux_corrected/
 
 # Ignorar archivos CSV y TSV si no deseas compartirlos
 *.csv
