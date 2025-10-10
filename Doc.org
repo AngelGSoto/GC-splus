@@ -560,19 +560,19 @@ python Splus_photometry_final.py
 
 - I have problem (I think) to do the
   aperture correction. There is a sistematic
-  offset between the my mesauremnets (SPLUS narrow band filters)
+  offset between my mesauremnets (SPLUS narrow band filters)
   and the Taylor broad band filter photometry (being brighter the splus photometry).
   I think because this offset is present in the
   globular cluster (GC), then this dont make sense
-  becouse the phothometri between the filter should
+  because the phothometry between the filter should
   be homogeneus for GC. So I do again all
   without aperture phothometry. Here the scripts
-  withou to aperture correction part.
+  without to aperture correction part.
 
 ** Final aproach
 
-I decided to apply de unsharc masking and aperture correctio
-similar to Buzzeo et al. 2022. Here the texto:
+I decided to apply de unsharc masking and aperture correction
+similar to Buzzo et al. 2022. Here the texto:
 
 Galaxy subtraction
 We compare three methods to perform galaxy–light subtraction, an
@@ -637,6 +637,16 @@ reference stars instead GCs. Ester very well comportadas.
     Splus_photometry_final_bg_modeling_without_Apercorrection.py
 
 #+END_SRC
+
+*** Final script to the photomery and calibration
+
+- To calculate the instrumental mags
+: extract_splus_gaia_xp_simple_final.py
+- Estimating the Zero Points
+: ZeroPoints_calculations_final.py
+- To do the photometry
+: Splus_photometry_gc_buzio_unsharp_final.py
+: Splus_photometry_gc_buzio_unsharp_final_PointSourses.py
 
 ** Comments
 In the fields CenA04, CenA05, Cen08, CenA14, CenA15, CenA24 there is not sources from the catalog of Taylor.
