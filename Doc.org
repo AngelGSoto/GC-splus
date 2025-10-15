@@ -645,11 +645,32 @@ reference stars instead GCs. Ester very well comportadas.
 - Estimating the Zero Points
 : ZeroPoints_calculations_final.py
 - To do the photometry
-: Splus_photometry_gc_buzio_unsharp_final.py
+: Splus_photometry_gc_buzio_unsharp_final_errorFitted.py
 : Splus_photometry_gc_buzio_unsharp_final_PointSourses.py
+En este ultimo hay una version para readudar cuando se es interrumpido el proceso.
 
 ** Comments
 In the fields CenA04, CenA05, Cen08, CenA14, CenA15, CenA24 there is not sources from the catalog of Taylor.
+
+- Dado que you estoy haciendo fotometri de apertura para los 8 filtros estrechos y los filtros
+de Taylor (anchos) tienen fotometria PSF, pensaria que que deben ahber diferencias. Entonces
+comno la idea es hacer set fitting con CIGALE usando tanto los filtro nde splus como los de Taylor
+yo creo que hay que homogenizar.
+
+Para ellos agarre el catago de estrellas de referencia usando GAIA para calcular los zeroPoints
+hice crossmatch con el catalogo de pointsoueces de taylor (TAP_1_J_MNRAS_3444_psc.csv) e hice croas con 
+los archivos que hay habia generado previamente XXX_gaia_xp_matches_3arcsec.csv.
+
+: crossmatch_reference_taylor.py
+
+este genera archivos: XXX_reference_taylor_matches.csv
+
+Luego el script que hace la fotometria para estas estrellas de referencia es:
+
+: photometry_referenceStars.py
+
+los archivos de salida son: XXX_reference_stars_photometry_v17.csv
+
 
 * Science
 
