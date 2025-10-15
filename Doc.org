@@ -631,10 +631,9 @@ reference stars instead GCs. Ester very well comportadas.
   and the unsharp masking applied.
   
 
- #+BEGIN_SRC sh
+#+BEGIN_SRC sh
    extract_splus_gaia_xp_without_Apercorrected_bg_corrected.py
-
-    Splus_photometry_final_bg_modeling_without_Apercorrection.py
+   Splus_photometry_final_bg_modeling_without_Apercorrection.py
 
 #+END_SRC
 
