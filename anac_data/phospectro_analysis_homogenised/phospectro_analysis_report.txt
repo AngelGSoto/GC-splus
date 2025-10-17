@@ -1,0 +1,36 @@
+REPORTE DE ANÁLISIS PHOSPECTRO - FOTOMETRÍA HOMOGENIZADA
+============================================================
+
+FECHA: 2025-10-16 16:09:19
+CATÁLOGO: all_fields_gc_photometry_corrected_errors_v17_homogenised_complete.csv
+
+ESTADÍSTICAS GENERALES:
+------------------------------
+Total de fuentes: 3799
+Campos incluidos: 18
+
+FOTOMETRÍA DISPONIBLE:
+------------------------------
+Filtros SPLUS: 7
+  SPLUS_F395: 32 fuentes
+  SPLUS_F410: 28 fuentes
+  SPLUS_F515: 39 fuentes
+  SPLUS_F660: 40 fuentes
+  SPLUS_F861: 40 fuentes
+  SPLUS_F378: 29 fuentes
+  SPLUS_F430: 33 fuentes
+
+Filtros DECam: 5
+  DECam_umag: 3612 fuentes
+  DECam_gmag: 3612 fuentes
+  DECam_rmag: 3612 fuentes
+  DECam_imag: 3612 fuentes
+  DECam_zmag: 3612 fuentes
+
+DIRECTORIOS CREADOS:
+------------------------------
+base: phospectro_analysis_homogenised
+seds: phospectro_analysis_homogenised/seds
+color_color: phospectro_analysis_homogenised/color_color_diagrams
+spectral_fitting: phospectro_analysis_homogenised/spectral_fitting
+comparisons: phospectro_analysis_homogenised/comparisons

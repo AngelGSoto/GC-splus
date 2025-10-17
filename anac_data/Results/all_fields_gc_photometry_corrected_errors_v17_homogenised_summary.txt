@@ -1,0 +1,263 @@
+RESUMEN DE HOMOGENIZACIÓN FOTOMÉTRICA CON PROPAGACIÓN DE ERRORES
+============================================================
+
+FECHA: 2025-10-16 15:28:47
+CATÁLOGO ORIGINAL: all_fields_gc_photometry_corrected_errors_v17.csv
+CATÁLOGO HOMOGENIZADO: all_fields_gc_photometry_corrected_errors_v17_homogenised.csv
+
+OFFSETS E INCERTIDUMBRES APLICADOS:
+----------------------------------------
+CenA01:
+  F378: +0.059 ± 0.129 mag
+  F395: +0.228 ± 0.132 mag
+  F410: +0.843 ± 0.163 mag
+  F430: -0.601 ± 0.076 mag
+  F515: -0.014 ± 0.075 mag
+  F660: -0.035 ± 0.042 mag
+  F861: +0.049 ± 0.051 mag
+
+CenA02:
+  F378: +0.059 ± 0.129 mag
+  F395: +0.228 ± 0.132 mag
+  F410: +0.843 ± 0.163 mag
+  F430: -0.601 ± 0.076 mag
+  F515: -0.014 ± 0.075 mag
+  F660: -0.035 ± 0.042 mag
+  F861: +0.049 ± 0.051 mag
+
+CenA03:
+  F378: +0.091 ± 0.129 mag
+  F395: +0.213 ± 0.132 mag
+  F410: +0.803 ± 0.163 mag
+  F430: -0.635 ± 0.076 mag
+  F515: -0.087 ± 0.075 mag
+  F660: -0.045 ± 0.042 mag
+  F861: -0.073 ± 0.051 mag
+
+CenA09:
+  F378: +0.091 ± 0.129 mag
+  F395: +0.135 ± 0.132 mag
+  F410: +0.762 ± 0.163 mag
+  F430: -0.534 ± 0.076 mag
+  F515: -0.145 ± 0.075 mag
+  F660: -0.081 ± 0.042 mag
+  F861: -0.073 ± 0.051 mag
+
+CenA10:
+  F378: -0.051 ± 0.129 mag
+  F395: +0.089 ± 0.132 mag
+  F410: +0.762 ± 0.163 mag
+  F430: -0.716 ± 0.076 mag
+  F515: -0.067 ± 0.075 mag
+  F660: -0.001 ± 0.042 mag
+  F861: -0.100 ± 0.051 mag
+
+CenA11:
+  F378: -0.268 ± 0.129 mag
+  F395: -0.128 ± 0.132 mag
+  F410: +0.460 ± 0.163 mag
+  F430: -0.864 ± 0.076 mag
+  F515: -0.231 ± 0.075 mag
+  F660: -0.097 ± 0.042 mag
+  F861: -0.077 ± 0.051 mag
+
+CenA12:
+  F378: +0.234 ± 0.129 mag
+  F395: +0.429 ± 0.132 mag
+  F410: +1.141 ± 0.163 mag
+  F430: -0.604 ± 0.076 mag
+  F515: +0.106 ± 0.075 mag
+  F660: +0.087 ± 0.042 mag
+  F861: +0.056 ± 0.051 mag
+
+CenA13:
+  F378: +0.207 ± 0.129 mag
+  F395: +0.400 ± 0.132 mag
+  F410: +1.047 ± 0.163 mag
+  F430: -0.472 ± 0.076 mag
+  F515: +0.146 ± 0.075 mag
+  F660: +0.173 ± 0.042 mag
+  F861: -0.057 ± 0.051 mag
+
+CenA16:
+  F378: +0.112 ± 0.129 mag
+  F395: +0.199 ± 0.132 mag
+  F410: +0.854 ± 0.163 mag
+  F430: -0.713 ± 0.076 mag
+  F515: -0.085 ± 0.075 mag
+  F660: -0.023 ± 0.042 mag
+  F861: -0.087 ± 0.051 mag
+
+CenA17:
+  F378: -0.138 ± 0.129 mag
+  F395: -0.056 ± 0.132 mag
+  F410: +0.594 ± 0.163 mag
+  F430: -0.889 ± 0.076 mag
+  F515: -0.270 ± 0.075 mag
+  F660: -0.072 ± 0.042 mag
+  F861: -0.103 ± 0.051 mag
+
+CenA18:
+  F378: -0.108 ± 0.129 mag
+  F395: -0.001 ± 0.132 mag
+  F410: +0.627 ± 0.163 mag
+  F430: -0.703 ± 0.076 mag
+  F515: -0.085 ± 0.075 mag
+  F660: -0.054 ± 0.042 mag
+  F861: +0.034 ± 0.051 mag
+
+CenA19:
+  F378: +0.092 ± 0.129 mag
+  F395: +0.235 ± 0.132 mag
+  F410: +0.661 ± 0.163 mag
+  F430: -0.603 ± 0.076 mag
+  F515: -0.164 ± 0.075 mag
+  F660: -0.073 ± 0.042 mag
+  F861: -0.150 ± 0.051 mag
+
+CenA20:
+  F378: +0.370 ± 0.129 mag
+  F395: +0.507 ± 0.132 mag
+  F410: +1.105 ± 0.163 mag
+  F430: -0.568 ± 0.076 mag
+  F515: +0.056 ± 0.075 mag
+  F660: +0.088 ± 0.042 mag
+  F861: +0.003 ± 0.051 mag
+
+CenA21:
+  F378: +0.008 ± 0.129 mag
+  F395: +0.134 ± 0.132 mag
+  F410: +0.653 ± 0.163 mag
+  F430: -0.837 ± 0.076 mag
+  F515: -0.220 ± 0.075 mag
+  F660: -0.133 ± 0.042 mag
+  F861: -0.148 ± 0.051 mag
+
+CenA22:
+  F378: +0.251 ± 0.129 mag
+  F395: +0.353 ± 0.132 mag
+  F410: +0.936 ± 0.163 mag
+  F430: -0.666 ± 0.076 mag
+  F515: -0.090 ± 0.075 mag
+  F660: -0.001 ± 0.042 mag
+  F861: -0.002 ± 0.051 mag
+
+CenA23:
+  F378: +0.193 ± 0.129 mag
+  F395: +0.320 ± 0.132 mag
+  F410: +0.990 ± 0.163 mag
+  F430: -0.560 ± 0.076 mag
+  F515: -0.132 ± 0.075 mag
+  F660: -0.086 ± 0.042 mag
+  F861: -0.072 ± 0.051 mag
+
+ESTADÍSTICAS POR CAMPO:
+------------------------------
+CenA01: 181 cúmulos globulares
+CenA02: 43 cúmulos globulares
+CenA03: 84 cúmulos globulares
+CenA06: 14 cúmulos globulares
+CenA07: 44 cúmulos globulares
+CenA09: 123 cúmulos globulares
+CenA10: 140 cúmulos globulares
+CenA11: 1175 cúmulos globulares
+CenA12: 105 cúmulos globulares
+CenA13: 83 cúmulos globulares
+CenA16: 283 cúmulos globulares
+CenA17: 314 cúmulos globulares
+CenA18: 209 cúmulos globulares
+CenA19: 210 cúmulos globulares
+CenA20: 269 cúmulos globulares
+CenA21: 344 cúmulos globulares
+CenA22: 113 cúmulos globulares
+CenA23: 65 cúmulos globulares
+
+TOTAL: 3799 cúmulos globulares
+
+PROPAGACIÓN DE ERRORES APLICADA:
+----------------------------------------
+1. Magnitudes: σ_mag_corr = √(σ_mag_orig² + σ_offset²)
+2. Flujos: σ_flux = 0.4 * ln(10) * flux * σ_mag
+3. SNR: SNR_corr = flux_corr / σ_flux_corr
+Donde σ_offset es la MAD de los offsets entre campos
+
+INSTRUCCIONES PARA USO:
+------------------------------
+1. Las magnitudes S-PLUS han sido homogenizadas con el catálogo de Taylor+2017
+2. Los offsets aplicados son: mag_homogenised = mag_original + offset
+3. Los errores incluyen la incertidumbre en los offsets (MAD entre campos)
+4. Los flujos y SNR han sido recalculados consistentemente
+5. Use estas magnitudes para SED fitting con CIGALE combinando con DECam
+
+COLUMNAS MODIFICADAS:
+------------------------------
+MAG_F378_2     -> Corregida con offset
+MAGERR_F378_2  -> Propagada con σ_offset
+FLUX_F378_2    -> Recalculada consistentemente
+FLUXERR_F378_2 -> Propagada con derivadas
+SNR_F378_2     -> Recalculada
+MAG_F378_3     -> Corregida con offset
+MAGERR_F378_3  -> Propagada con σ_offset
+FLUX_F378_3    -> Recalculada consistentemente
+FLUXERR_F378_3 -> Propagada con derivadas
+SNR_F378_3     -> Recalculada
+MAG_F395_2     -> Corregida con offset
+MAGERR_F395_2  -> Propagada con σ_offset
+FLUX_F395_2    -> Recalculada consistentemente
+FLUXERR_F395_2 -> Propagada con derivadas
+SNR_F395_2     -> Recalculada
+MAG_F395_3     -> Corregida con offset
+MAGERR_F395_3  -> Propagada con σ_offset
+FLUX_F395_3    -> Recalculada consistentemente
+FLUXERR_F395_3 -> Propagada con derivadas
+SNR_F395_3     -> Recalculada
+MAG_F410_2     -> Corregida con offset
+MAGERR_F410_2  -> Propagada con σ_offset
+FLUX_F410_2    -> Recalculada consistentemente
+FLUXERR_F410_2 -> Propagada con derivadas
+SNR_F410_2     -> Recalculada
+MAG_F410_3     -> Corregida con offset
+MAGERR_F410_3  -> Propagada con σ_offset
+FLUX_F410_3    -> Recalculada consistentemente
+FLUXERR_F410_3 -> Propagada con derivadas
+SNR_F410_3     -> Recalculada
+MAG_F430_2     -> Corregida con offset
+MAGERR_F430_2  -> Propagada con σ_offset
+FLUX_F430_2    -> Recalculada consistentemente
+FLUXERR_F430_2 -> Propagada con derivadas
+SNR_F430_2     -> Recalculada
+MAG_F430_3     -> Corregida con offset
+MAGERR_F430_3  -> Propagada con σ_offset
+FLUX_F430_3    -> Recalculada consistentemente
+FLUXERR_F430_3 -> Propagada con derivadas
+SNR_F430_3     -> Recalculada
+MAG_F515_2     -> Corregida con offset
+MAGERR_F515_2  -> Propagada con σ_offset
+FLUX_F515_2    -> Recalculada consistentemente
+FLUXERR_F515_2 -> Propagada con derivadas
+SNR_F515_2     -> Recalculada
+MAG_F515_3     -> Corregida con offset
+MAGERR_F515_3  -> Propagada con σ_offset
+FLUX_F515_3    -> Recalculada consistentemente
+FLUXERR_F515_3 -> Propagada con derivadas
+SNR_F515_3     -> Recalculada
+MAG_F660_2     -> Corregida con offset
+MAGERR_F660_2  -> Propagada con σ_offset
+FLUX_F660_2    -> Recalculada consistentemente
+FLUXERR_F660_2 -> Propagada con derivadas
+SNR_F660_2     -> Recalculada
+MAG_F660_3     -> Corregida con offset
+MAGERR_F660_3  -> Propagada con σ_offset
+FLUX_F660_3    -> Recalculada consistentemente
+FLUXERR_F660_3 -> Propagada con derivadas
+SNR_F660_3     -> Recalculada
+MAG_F861_2     -> Corregida con offset
+MAGERR_F861_2  -> Propagada con σ_offset
+FLUX_F861_2    -> Recalculada consistentemente
+FLUXERR_F861_2 -> Propagada con derivadas
+SNR_F861_2     -> Recalculada
+MAG_F861_3     -> Corregida con offset
+MAGERR_F861_3  -> Propagada con σ_offset
+FLUX_F861_3    -> Recalculada consistentemente
+FLUXERR_F861_3 -> Propagada con derivadas
+SNR_F861_3     -> Recalculada
