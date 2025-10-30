@@ -1016,6 +1016,9 @@ Nota clave para el paper: Los offsets grandes en F410 (+0.803 mag) son consisten
     Documento actualizado: [Fecha] *
     #+END_CENTER
 
+* Point Sources catalog
+
+: Results/all_fields_gc_photometry_FAST_SAFE_CORRECTED_ERRORS_v17.csv
 
 * Science
 
