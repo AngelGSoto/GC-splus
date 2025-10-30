@@ -1,0 +1,25 @@
+METADATA: Globular Cluster Photometry Catalog - NGC 5128
+============================================================
+
+creation_date: 2025-10-30 17:38:25
+original_source: all_fields_gc_photometry_corrected_errors_v17.csv
+cleaning_strategy: High-Quality Strategy
+cleaning_criteria:
+  - Exclude all measurements with error = 0.543 (invalid measurements)
+  - Maximum error: 0.5 mag for all filters
+  - Minimum SNR: 2.5 for all filters
+  - Minimum valid filters per source: 5
+  - Aperture used: 3 arcsec
+final_sample_size: 507
+retention_rate: 13.3%
+filters_included:
+  - F378
+  - F395
+  - F410
+  - F430
+  - F515
+  - F660
+  - F861
+photometry_system: SPLESS (12 narrow bands) + Taylor+2017 (DECam ugriz)
+purpose: High-impact paper on globular clusters in Centaurus A
+contact: Luis A. Gutiérrez Soto - gsoto.angel@gmail.com
