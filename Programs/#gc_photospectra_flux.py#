@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""
+Script CORREGIDO para CIGALE - Solo lo esencial
+"""
+
+import pandas as pd
+import os
+import subprocess
+import sys
+
+def create_simple_input():
+    """Crear archivo de entrada simple"""
+    print("📝 Creando input_cigale.csv...")
+    
+    # Datos MUY simples de prueba
+    data = {
+        'id': ['GC1', 'GC2', 'GC3', 'GC4', 'GC5'],
+        'redshift': [0.0, 0.0, 0.0, 0.0, 0.0],
+        'splus.F378': [10.0, 15.0, 20.0, 25.0, 30.0],
+        'splus.F378_err': [1.0, 1.5, 2.0, 2.5, 3.0],
+        'splus.F395': [12.0, 17.0, 22.0, 27.0, 32.0],
+        'splus.F395_err': [1.2, 1.7, 2.2, 2.7, 3.2],
+        'splus.F410': [11.0, 16.0, 21.0, 26.0, 31.0],
+        'splus.F410_err': [1.1, 1.6, 2.1, 2.6, 3.1],
+        'taylor.u': [8.0, 12.0, 16.0, 20.0, 24.0],
+        'taylor.u_err': [0.8, 1.2, 1.6, 2.0, 2.4],
+        'taylor.g': [9.0, 13.0, 17.0, 21.0, 25.0],
+        'taylor.g_err': [0.9, 1.3, 1.7, 2.1, 2.5]
+    }
+    
+    df = pd.DataFrame(data)
+    df.to_csv("input_cigale.csv", index=False)
+    print(f"✅ input_cigale.csv creado con {len(df)} objetos")
+    return True
+
+def setup_cigale_simple():
+    """Configuración simple paso a paso"""
+    
+    # 1. Limpiar
+    for f in ["pcigale.ini", "pcigale.ini.spec"]:
+        if os.path.exists(f):
+            os.remove(f)
+    
+    # 2. pcigale init
+    print("🚀 Ejecutando pcigale init...")
+    result = subprocess.run(["pcigale", "init"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ pcigale init falló: {result.stderr}")
+        return False
+    print("✅ pcigale init OK")
+    
+    # 3. Configuración básica
+    print("📝 Escribiendo configuración básica...")
+    config = """data_file = input_cigale.csv
+parameters_file = 
+sed_modules = sfhdelayed, bc03, dustatt_modified_starburst, redshifting
+analysis_method = pdf_analysis
+cores = 2
+"""
+    with open("pcigale.ini", "w") as f:
+        f.write(config)
+    print("✅ Configuración básica escrita")
+    
+    # 4. pcigale genconf
+    print("🚀 Ejecutando pcigale genconf...")
+    result = subprocess.run(["pcigale", "genconf"], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"❌ pcigale genconf falló: {result.stderr}")
+        return False
+    print("✅ pcigale genconf OK")
+    
+    # 5. pcigale check
+    print("🔍 Verificando configuración...")
+    result = subprocess.run(["pcigale", "check"], capture_output=True, text=True)
+    if result.returncode == 0:
+        print("✅ Configuración verificada")
+        for line in result.stdout.split('\n'):
+            if 'model' in line.lower():
+                print(f"📊 {line.strip()}")
+    else:
+        print(f"⚠️ Check mostró advertencias: {result.stderr}")
+    
+    return True
+
+def main():
+    print("🔄 CONFIGURACIÓN CIGALE - VERSIÓN SIMPLE")
+    
+    # Crear entrada
+    if not create_simple_input():
+        return
+    
+    # Configurar CIGALE
+    if not setup_cigale_simple():
+        print("❌ La configuración falló")
+        return
+    
+    print("\n🎉 ¡CONFIGURACIÓN EXITOSA!")
+    print("📁 Archivos creados: input_cigale.csv, pcigale.ini, pcigale.ini.spec")
+    print("\n🚀 Para ejecutar: pcigale run")
+
+if __name__ == "__main__":
+    main()
