@@ -75,9 +75,11 @@ print(obs_spec["wl"])
 
 # Estimate of magnitude of the photometric system
 x = spec2filterset(f.filterset, obs_spec, model_spec = None, badpxl_tolerance = 0.5)
+# Optimize string processing by avoiding repeated splits
 for xx, yy in zip(np.unique(f.filterset['ID_filter']), x['m_ab']):
-    xx=str(xx).split("b'")[-1].split("'")[0]
-    magn[xx] = float(yy)
+    # Decode bytes to string more efficiently
+    filter_name = xx.decode('utf-8') if isinstance(xx, bytes) else str(xx)
+    magn[filter_name] = float(yy)
 if cmd_args.debug:
     print("Calculating the magnitude of:", magn["id"])
 
