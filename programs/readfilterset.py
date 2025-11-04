@@ -33,7 +33,11 @@ class readfilterset(object):
             filter_data['transm'] = new_transm
             result_parts.append(filter_data)
         # Concatenate all parts at once instead of building list and converting
-        self.filterset = np.concatenate(result_parts) if result_parts else np.array([], dtype=self.filterset.dtype)
+        if result_parts:
+            self.filterset = np.concatenate(result_parts)
+        # If no results, keep empty array with same dtype
+        elif hasattr(self, 'filterset') and self.filterset is not None:
+            self.filterset = np.array([], dtype=self.filterset.dtype)
             
     def calc_filteravgwls(self):
         # Vectorized calculation of filter average wavelengths

@@ -35,6 +35,10 @@ def plot_mag(f1, f2, f3):
     """
     Optimized plot_mag function using data-driven approach.
     Replaces 76 repetitive filter_mag calls with a loop over configuration.
+    
+    Note: The results are unpacked into individual variables (x, y, x1, y1, etc.)
+    to maintain backward compatibility with the extensive downstream code that
+    references these specific variable names in plotting and data processing.
     """
     # Configuration: (suffix, prefix) for all filter categories
     filter_configs = [
