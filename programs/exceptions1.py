@@ -95,8 +95,8 @@ class BGPECLIError(Exception):
         Args:
             msg: Error message
         """
-        super().__init__(type(self))
         self.msg = f"ERROR: {msg}"
+        super().__init__(self.msg)
     
     def __str__(self):
         return self.msg
