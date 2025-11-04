@@ -14,19 +14,29 @@ def printException(e, stream=sys.stdout):
     """
     Print exception details to the specified stream.
     
+    This function should be called from within an exception handler
+    to ensure sys.exc_info() has valid exception context.
+    
     Args:
         e: The exception to print
         stream: Output stream (default: sys.stdout)
     """
-    print(''.join(strException(e)), file=stream)
+    exc_info = sys.exc_info()
+    if exc_info[0] is not None:
+        print(''.join(traceback.format_exception(*exc_info)), file=stream)
+    else:
+        print(f"{type(e).__name__}: {e}", file=stream)
 
-    if hasattr(e, 'cause') and getattr(e, 'cause') is not None:
+    if getattr(e, 'cause', None) is not None:
         print("Caused by:", file=stream, end=' ')
         print(''.join(e.cause), file=stream)
 
 def strException(e):
     """
     Convert exception to a formatted string representation.
+    
+    This function should be called from within an exception handler
+    to ensure sys.exc_info() has valid exception context.
     
     Adapted from chimera observatory control system
     (http://code.google.com/p/chimera)
@@ -35,15 +45,21 @@ def strException(e):
         e: The exception to format
         
     Returns:
-        List of strings representing the formatted exception traceback
+        List of strings representing the formatted exception traceback,
+        or a simple string representation if no exception context is available
     """
     try:
         exc_type, exc_value, exc_tb = sys.exc_info()
-        local_tb = traceback.format_exception(exc_type, exc_value, exc_tb)
-        return local_tb
+        if exc_type is not None:
+            local_tb = traceback.format_exception(exc_type, exc_value, exc_tb)
+            return local_tb
+        else:
+            # No active exception context, return simple representation
+            return [f"{type(e).__name__}: {e}\n"]
     finally:
         # Clean up cycle to traceback, to allow proper GC
-        del exc_type, exc_value, exc_tb
+        if 'exc_type' in locals():
+            del exc_type, exc_value, exc_tb
 
 # Exceptions Hierarchy
 
@@ -60,10 +76,11 @@ class BGPEException(Exception):
         """
         super().__init__(msg, *args)
 
-        if not all(sys.exc_info()):
-            self.cause = None
+        exc_info = sys.exc_info()
+        if exc_info[0] is not None and exc_info[1] is not None:
+            self.cause = strException(exc_info[1])
         else:
-            self.cause = strException(sys.exc_info()[1])
+            self.cause = None
 
 
 class BGPECLIError(Exception):
