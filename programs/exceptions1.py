@@ -58,8 +58,10 @@ def strException(e):
             return [f"{type(e).__name__}: {e}\n"]
     finally:
         # Clean up cycle to traceback, to allow proper GC
-        if 'exc_type' in locals():
+        try:
             del exc_type, exc_value, exc_tb
+        except NameError:
+            pass  # Variables were not assigned
 
 # Exceptions Hierarchy
 
@@ -77,7 +79,7 @@ class BGPEException(Exception):
         super().__init__(msg, *args)
 
         exc_info = sys.exc_info()
-        if exc_info[0] is not None and exc_info[1] is not None:
+        if exc_info[0] is not None:
             self.cause = strException(exc_info[1])
         else:
             self.cause = None
