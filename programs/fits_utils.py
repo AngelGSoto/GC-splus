@@ -69,10 +69,11 @@ def crop_fits_image(hdu, crop_coord, crop_radius, pix_scale, update_crval=False)
     crop_radius_pixels = crop_radius.to(u.arcsec) / pix_scale.to(u.arcsec)
     
     # Calculate crop boundaries
-    x1 = int(np.clip(crop_c_pix[0] - crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
-    x2 = int(np.clip(crop_c_pix[0] + crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
-    y1 = int(np.clip(crop_c_pix[1] - crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
-    y2 = int(np.clip(crop_c_pix[1] + crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    # Note: shape[0] is rows (y), shape[1] is columns (x)
+    x1 = int(np.clip(crop_c_pix[0] - crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    x2 = int(np.clip(crop_c_pix[0] + crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    y1 = int(np.clip(crop_c_pix[1] - crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
+    y2 = int(np.clip(crop_c_pix[1] + crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
     
     # Crop the data
     cropped_data = hdu[0].data[y1:y2, x1:x2]
@@ -81,8 +82,9 @@ def crop_fits_image(hdu, crop_coord, crop_radius, pix_scale, update_crval=False)
     new_header = hdu[0].header.copy()
     if update_crval:
         # Set CRPIX to the center of the cropped image
-        new_header['CRPIX1'] = (cropped_data.shape[0] - 0.5) / 2.
-        new_header['CRPIX2'] = (cropped_data.shape[1] - 0.5) / 2.
+        # CRPIX1 is for x-axis (columns, shape[1]), CRPIX2 is for y-axis (rows, shape[0])
+        new_header['CRPIX1'] = (cropped_data.shape[1] - 0.5) / 2.
+        new_header['CRPIX2'] = (cropped_data.shape[0] - 0.5) / 2.
         # Set CRVAL to the crop center
         new_header['CRVAL1'] = crop_coord.ra.degree
         new_header['CRVAL2'] = crop_coord.dec.degree

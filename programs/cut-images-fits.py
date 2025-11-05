@@ -83,18 +83,20 @@ for line in f:
     crop_c_pix = w.wcs_world2pix(crop_c.ra.degree, crop_c.dec.degree, 0)
     crop_radius_pixels = crop_radius.to(u.arcsec) / pix_scale.to(u.arcsec)
    
-    x1 = int(np.clip(crop_c_pix[0] - crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
-    x2 = int(np.clip(crop_c_pix[0] + crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
-    y1 = int(np.clip(crop_c_pix[1] - crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
-    y2 = int(np.clip(crop_c_pix[1] + crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    # Note: shape[0] is rows (y), shape[1] is columns (x)
+    x1 = int(np.clip(crop_c_pix[0] - crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    x2 = int(np.clip(crop_c_pix[0] + crop_radius_pixels, 0, hdu[0].data.shape[1] - 1))
+    y1 = int(np.clip(crop_c_pix[1] - crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
+    y2 = int(np.clip(crop_c_pix[1] + crop_radius_pixels, 0, hdu[0].data.shape[0] - 1))
     
 
     hdu[0].data = hdu[0].data[y1:y2, x1:x2]
     
     if args.update_crval:
         # Update header with new reference pixel at center and new reference coordinates
-        hdu[0].header['CRPIX1'] = (hdu[0].data.shape[0] - 0.5) / 2.
-        hdu[0].header['CRPIX2'] = (hdu[0].data.shape[1] - 0.5) / 2.
+        # CRPIX1 is for x-axis (columns, shape[1]), CRPIX2 is for y-axis (rows, shape[0])
+        hdu[0].header['CRPIX1'] = (hdu[0].data.shape[1] - 0.5) / 2.
+        hdu[0].header['CRPIX2'] = (hdu[0].data.shape[0] - 0.5) / 2.
         hdu[0].header['CRVAL1'] = crop_c.ra.degree
         hdu[0].header['CRVAL2'] = crop_c.dec.degree
     else:

@@ -5,6 +5,9 @@ Created on Feb 23, 2012
 Consolidated exception handling module.
 This module merges exceptions from both exceptions.py and exceptions1.py
 to eliminate duplication.
+
+Note: Updated to use Python 3 print function syntax for consistency with
+other modules in the repository that use 'from __future__ import print_function'.
 '''
 
 import sys
@@ -15,7 +18,12 @@ import traceback
 
 
 def printException(e, stream=sys.stdout):
-    """Print exception with traceback to stream."""
+    """
+    Print exception with traceback to stream.
+    
+    Note: Uses Python 3 print function. For Python 2 compatibility,
+    ensure 'from __future__ import print_function' is used.
+    """
     print(''.join(strException(e)), file=stream)
 
     if hasattr(e, 'cause') and getattr(e, 'cause') is not None:

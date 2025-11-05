@@ -8,6 +8,7 @@ To use the old behavior of cut-images-fits-1.py, run:
 from __future__ import print_function
 import sys
 import subprocess
+import os
 
 # This script is deprecated - redirect to the consolidated version
 print("Note: cut-images-fits-1.py is deprecated. Using cut-images-fits.py with appropriate parameters.")
@@ -15,7 +16,9 @@ print("To directly use the new script with this behavior, run:")
 print('  cut-images-fits.py <source> --suffix=".fits" --crop-radius=80.0 --update-crval --output-suffix="-crop-findingchart.fits"\n')
 
 # Build command line arguments for the consolidated script
-args = ['python', 'cut-images-fits.py']
+# Use the same Python interpreter that's running this script
+script_path = os.path.join(os.path.dirname(__file__), 'cut-images-fits.py')
+args = [sys.executable, script_path]
 args.extend(sys.argv[1:])  # Pass through positional arguments
 
 # Add default parameters that match cut-images-fits-1.py behavior
