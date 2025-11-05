@@ -83,8 +83,9 @@ def crop_fits_image(hdu, crop_coord, crop_radius, pix_scale, update_crval=False)
     if update_crval:
         # Set CRPIX to the center of the cropped image
         # CRPIX1 is for x-axis (columns, shape[1]), CRPIX2 is for y-axis (rows, shape[0])
-        new_header['CRPIX1'] = (cropped_data.shape[1] - 0.5) / 2.
-        new_header['CRPIX2'] = (cropped_data.shape[0] - 0.5) / 2.
+        # FITS uses 1-based indexing, so center is at (N-1)/2 + 1 = (N+1)/2
+        new_header['CRPIX1'] = (cropped_data.shape[1] + 1) / 2.0
+        new_header['CRPIX2'] = (cropped_data.shape[0] + 1) / 2.0
         # Set CRVAL to the crop center
         new_header['CRVAL1'] = crop_coord.ra.degree
         new_header['CRVAL2'] = crop_coord.dec.degree

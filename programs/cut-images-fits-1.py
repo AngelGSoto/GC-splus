@@ -17,7 +17,9 @@ print('  cut-images-fits.py <source> --suffix=".fits" --crop-radius=80.0 --updat
 
 # Build command line arguments for the consolidated script
 # Use the same Python interpreter that's running this script
-script_path = os.path.join(os.path.dirname(__file__), 'cut-images-fits.py')
+# Derive the script path from sys.argv[0] to handle different execution contexts
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+script_path = os.path.join(script_dir, 'cut-images-fits.py')
 args = [sys.executable, script_path]
 args.extend(sys.argv[1:])  # Pass through positional arguments
 

@@ -26,7 +26,7 @@ def printException(e, stream=sys.stdout):
     """
     print(''.join(strException(e)), file=stream)
 
-    if hasattr(e, 'cause') and getattr(e, 'cause') is not None:
+    if hasattr(e, 'cause') and e.cause is not None:
         print("Caused by:", file=stream)
         print(''.join(e.cause), file=stream)
 

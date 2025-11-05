@@ -95,8 +95,9 @@ for line in f:
     if args.update_crval:
         # Update header with new reference pixel at center and new reference coordinates
         # CRPIX1 is for x-axis (columns, shape[1]), CRPIX2 is for y-axis (rows, shape[0])
-        hdu[0].header['CRPIX1'] = (hdu[0].data.shape[1] - 0.5) / 2.
-        hdu[0].header['CRPIX2'] = (hdu[0].data.shape[0] - 0.5) / 2.
+        # FITS uses 1-based indexing, so center is at (N-1)/2 + 1 = (N+1)/2
+        hdu[0].header['CRPIX1'] = (hdu[0].data.shape[1] + 1) / 2.0
+        hdu[0].header['CRPIX2'] = (hdu[0].data.shape[0] + 1) / 2.0
         hdu[0].header['CRVAL1'] = crop_c.ra.degree
         hdu[0].header['CRVAL2'] = crop_c.dec.degree
     else:

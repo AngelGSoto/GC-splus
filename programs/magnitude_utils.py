@@ -1,6 +1,18 @@
 '''
 Utility functions for magnitude and filter calculations.
-This module contains shared functions used across multiple diagram scripts.
+
+This module contains shared functions used across multiple diagram scripts
+to calculate color differences from photometric filter data.
+
+Main Functions:
+--------------
+calculate_color_differences(data, e, s, f1, f2, f3)
+    Standard version that checks both the ending and starting of ID strings.
+    Returns color differences (f1-f2, f1-f3) for matching data entries.
+
+calculate_color_differences_simple(data, e, f1, f2, f3)
+    Simplified version that only checks the ending of ID strings.
+    Returns color differences (f1-f2, f1-f3) for matching data entries.
 '''
 from __future__ import print_function
 
