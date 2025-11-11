@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 buzzeo_galaxy_subtraction_full.py
-EXACT IMPLEMENTATION OF BUZZEO ET AL. 2022 METHODOLOGY
+EXACT IMPLEMENTATION OF BUZZiO ET AL. 2022 METHODOLOGY
 Full processing of all filters and fields
 """
 
@@ -81,7 +81,7 @@ class BuzzeoGalaxySubtractionFull:
             return residual_image, galaxy_model, median_filtered
             
         except Exception as e:
-            logging.error(f"Error in Buzzeo galaxy subtraction: {e}")
+            logging.error(f"Error in Buzzio galaxy subtraction: {e}")
             return data, np.zeros_like(data), data
 
     def process_field_filter(self, field, filter_name):
@@ -302,7 +302,7 @@ class BuzzeoGalaxySubtractionFull:
         galaxy_subtracted = df['galaxy_subtracted'].sum()
         
         print("\n" + "="*70)
-        print("🎯 BUZZEO ET AL. 2022 GALAXY SUBTRACTION - FULL REPORT")
+        print("BUZZEO ET AL. 2022 GALAXY SUBTRACTION - FULL REPORT")
         print("="*70)
         print(f"Total images processed: {total_processed}")
         print(f"Galaxy subtraction applied: {galaxy_subtracted} ({galaxy_subtracted/total_processed:.1%})")
@@ -320,8 +320,8 @@ class BuzzeoGalaxySubtractionFull:
         print(f"\nField summary:")
         print(field_summary)
         
-        print(f"\n📁 Residual images: {self.output_dir / 'residual_images'}")
-        print(f"📊 Verification plots: {self.output_dir / 'verification_plots'}")
+        print(f"\n Residual images: {self.output_dir / 'residual_images'}")
+        print(f" Verification plots: {self.output_dir / 'verification_plots'}")
         print("="*70)
 
 def main():
@@ -330,7 +330,7 @@ def main():
     # Cambiar a test_mode=False para procesar todos los campos
     test_mode = True
     results = processor.run_full_processing(test_mode=test_mode)
-    logging.info("✅ BUZZEO METHODOLOGY COMPLETED")
+    logging.info("BUZZEO METHODOLOGY COMPLETED")
 
 if __name__ == "__main__":
     main()
