@@ -994,7 +994,8 @@ F861 → i (DECam) # Cercano a i-DECam
     Envío formal a A&A
 
 #+BEGIN_QUOTE
-Nota clave para el paper: Los offsets grandes en F410 (+0.803 mag) son consistentes con diferencias esperadas entre sistemas fotométricos y no afectan la utilidad científica de la homogenización para SED fitting.
+Nota clave para el paper: Los offsets grandes en F410 (+0.803 mag) son consistentes con diferencias
+esperadas entre sistemas fotométricos y no afectan la utilidad científica de la homogenización para SED fitting.
 #+END_QUOTE
 
     CÓDIGO Y DATOS
@@ -1027,6 +1028,7 @@ Nota clave para el paper: Los offsets grandes en F410 (+0.803 mag) son consisten
 - Email: gsoto.angel@gmail.com
 - Catalog reference: TAP_1_J_MNRAS_3444_gc.csv (Taylor et al. 2017, MNRAS, 3444)
 - SPLUS Survey: Mendes de Oliveira et al. (2019)
+- More papers: Dahmer-Hahn, L. G.  (https://ui.adsabs.harvard.edu/abs/2024A%26A...690A..93D/abstract)
 
 #+BEGIN_CENTER
 * Documentation last updated: 18/09/2025 *
