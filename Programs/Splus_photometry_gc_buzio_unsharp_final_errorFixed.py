@@ -96,7 +96,7 @@ def extract_header_information(header):
 def subtract_galaxy_background(data, median_box_size=25, gaussian_sigma=5):
     """
     RESTA EL FONDO GALÁCTICO para aislar cúmulos globulares y estrellas
-    Método CORRECTO: data - smoothed (como en Buzzeo et al. 2022)
+    Método CORRECTO: data - smoothed (como en Buzzio et al. 2022)
     """
     try:
         # Paso 1: Aplicar filtro de mediana para eliminar fuentes puntuales

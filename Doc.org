@@ -1021,6 +1021,25 @@ esperadas entre sistemas fotométricos y no afectan la utilidad científica de l
 
 : Results/all_fields_gc_photometry_FAST_SAFE_CORRECTED_ERRORS_v17.csv
 
+* Final
+
+Finally I decide not apply the homogenization, I this this is something arbitrary. 
+I also decide to remove the aper correction, because these are causing a overstimation 
+of the photometry, this is the script:
+
+: Splus_photometry_final_complete_v2.py
+
+To run:
+
+1. Test básico (CenA11 + F660, F861):
+: python Splus_photometry_final_complete_v2.py --test
+
+2. Test solo con CenA11 y todos los filtros:
+: python Splus_photometry_final_complete_v2.py --test --fields CenA11 --filters F378 F395 F410 F430 F515 F660 F861
+
+3. Procesamiento COMPLETO (todos los campos):
+: python Splus_photometry_final_complete_v2.py --all-fields
+
 * Science
 
 * Contact and References
