@@ -1,7 +1,7 @@
 METADATA: Globular Cluster Photometry Catalog - NGC 5128
 ============================================================
 
-creation_date: 2025-11-11 13:51:15
+creation_date: 2025-11-12 13:23:52
 original_source: all_fields_gc_photometry_corrected_errors_v17.csv
 cleaning_strategy: High-Quality Strategy
 cleaning_criteria:
