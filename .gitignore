@@ -40,6 +40,7 @@ photospectra_flux_corrected/
 anac_data/photospectra_homogenized_v3/
 anac_data/montage_work/
 anac_data/Figs-images/
+anac_data/paper_figures/Fig1_gc_galactic_map.eps
 
 # Ignorar archivos CSV y TSV si no deseas compartirlos
 *.csv
