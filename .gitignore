@@ -1,3 +1,6 @@
+# Files to include
+!anac_data/Figs-images/mosaico_simple_24campos.png
+
 # Ignorar archivos de datos y formatos científicos
 *.fz
 *.fits
@@ -28,12 +31,15 @@ __pycache__/
 # Ignorar carpetas de salida o resultados
 output/
 results/
+Results-v2
 tmp/
 temp/
 photospectra/
 photospectra_corrected/
 photospectra_flux_corrected/
 anac_data/photospectra_homogenized_v3/
+anac_data/montage_work/
+anac_data/Figs-images/
 
 # Ignorar archivos CSV y TSV si no deseas compartirlos
 *.csv

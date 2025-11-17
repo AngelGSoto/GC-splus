@@ -88,11 +88,11 @@ class SPLUSCompletePhotometry:
             
             # PARÁMETROS OPTIMIZADOS (conservadores)
             if field_name in ['CenA11', 'CenA12', 'CenA13']:  # Campos muy cercanos al centro
-                median_box = 45  # Más grande para preservar cúmulos
-                gaussian_sigma = 10  # Más suave para fondo galáctico extenso
+                median_box = 25  
+                gaussian_sigma = 5  
             else:
-                median_box = 35  
-                gaussian_sigma = 8
+                median_box = 20  
+                gaussian_sigma = 3
             
             logging.info(f"🔍 Unsharp mask {field_name} {filter_name}: box={median_box}, sigma={gaussian_sigma}")
             

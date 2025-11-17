@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script para crear mosaicos con Montage - Versión Terminal
-Con cálculo automático del header de referencia
+Con cálculo automático del header de referencia y manejo eficiente de memoria
 """
 
 import os
@@ -220,7 +220,7 @@ def crear_mosaico_con_header_automatico():
         # Crear RGB
         if len(mosaicos_finales) == 3:
             print("\n🌈 CREANDO IMAGEN RGB...")
-            success = crear_rgb_mejorado(mosaicos_finales, os.path.join("..", output_dir), len(campos))
+            success = crear_rgb_eficiente_memoria(mosaicos_finales, os.path.join("..", output_dir), len(campos))
             
             if success:
                 for filtro, archivo in mosaicos_finales.items():
@@ -247,13 +247,15 @@ def crear_mosaico_con_header_automatico():
 
 def crear_header_automatico_mejorado(ra, dec, size, output_file):
     """Header mejorado basado en cálculo automático"""
-    # Ajustar resolución según el tamaño
+    # Ajustar resolución según el tamaño para evitar mosaicos demasiado grandes
     if size <= 6:
         naxis = 1200
     elif size <= 8:
         naxis = 1000
-    else:
+    elif size <= 10:
         naxis = 800
+    else:  # size <= 12
+        naxis = 600  # Reducido para mosaicos grandes
     
     header_content = f"""SIMPLE  =                    T / file does conform to FITS standard
 BITPIX  =                  -64 / number of bits per data pixel
@@ -277,71 +279,94 @@ EQUINOX =               2000.0 / Equinox of celestial coordinate system
         f.write(header_content)
     print(f"   📐 Resolución: {naxis}×{naxis} píxeles")
 
-def crear_rgb_mejorado(mosaicos_dict, output_dir, total_campos):
-    """RGB mejorado con manejo de bordes"""
+def crear_rgb_eficiente_memoria(mosaicos_dict, output_dir, total_campos):
+    """Versión optimizada para memoria del creador de RGB"""
     try:
-        print("🎨 Creando imagen RGB mejorada...")
+        print("🎨 Creando imagen RGB optimizada para memoria...")
         
-        # Cargar datos con manejo de memoria
-        print("   📥 Cargando datos...")
+        # Primero analizar los archivos sin cargarlos completamente
+        print("   📊 Analizando estructura de archivos...")
         
-        with fits.open(mosaicos_dict['F861'], memmap=True) as hdul_r:
-            data_r = hdul_r[0].data
-            if data_r.dtype == np.float64:
-                data_r = data_r.astype(np.float32)
-            header = hdul_r[0].header
+        # Obtener dimensiones y WCS de un archivo de referencia
+        ref_file = list(mosaicos_dict.values())[0]
+        with fits.open(ref_file, memmap=True) as hdul:
+            header = hdul[0].header
+            shape = hdul[0].shape
             ra = header.get('CRVAL1', 'N/A')
             dec = header.get('CRVAL2', 'N/A')
         
-        with fits.open(mosaicos_dict['F660'], memmap=True) as hdul_g:
-            data_g = hdul_g[0].data
-            if data_g.dtype == np.float64:
-                data_g = data_g.astype(np.float32)
+        print(f"   📏 Tamaño del mosaico: {shape}")
         
-        with fits.open(mosaicos_dict['F515'], memmap=True) as hdul_b:
-            data_b = hdul_b[0].data
-            if data_b.dtype == np.float64:
-                data_b = data_b.astype(np.float32)
+        # Si el mosaico es muy grande, usar muestreo
+        max_size = 8000  # Tamaño máximo manejable
+        if max(shape) > max_size:
+            sample_factor = max(1, max(shape) // max_size)
+            print(f"   🔻 Muestreo: 1 de cada {sample_factor} píxeles")
+        else:
+            sample_factor = 1
+        
+        # Cargar datos con muestreo para reducir uso de memoria
+        print("   📥 Cargando datos con muestreo...")
+        
+        def cargar_con_muestreo(archivo, sample_factor):
+            with fits.open(archivo, memmap=True) as hdul:
+                data = hdul[0].data
+                if sample_factor > 1:
+                    # Muestreo simple para reducir tamaño
+                    data = data[::sample_factor, ::sample_factor]
+                return data.astype(np.float32)
+        
+        data_r = cargar_con_muestreo(mosaicos_dict['F861'], sample_factor)
+        data_g = cargar_con_muestreo(mosaicos_dict['F660'], sample_factor) 
+        data_b = cargar_con_muestreo(mosaicos_dict['F515'], sample_factor)
         
         print(f"   📊 Datos cargados: R={data_r.shape}, G={data_g.shape}, B={data_b.shape}")
         
-        # Encontrar regiones con datos válidos
-        print("   🔍 Analizando cobertura de datos...")
-        mask_r = data_r > 0
-        mask_g = data_g > 0  
-        mask_b = data_b > 0
+        # Encontrar región con datos válidos
+        print("   🔍 Encontrando región con datos...")
         
-        # Máscara combinada (donde al menos un canal tiene datos)
+        # Usar máscaras booleanas eficientes en memoria
+        mask_r = data_r > np.percentile(data_r[data_r > 0], 5) if np.any(data_r > 0) else np.zeros_like(data_r, dtype=bool)
+        mask_g = data_g > np.percentile(data_g[data_g > 0], 5) if np.any(data_g > 0) else np.zeros_like(data_g, dtype=bool)
+        mask_b = data_b > np.percentile(data_b[data_b > 0], 5) if np.any(data_b > 0) else np.zeros_like(data_b, dtype=bool)
+        
         mask_combined = mask_r | mask_g | mask_b
         
-        # Encontrar los límites de la región con datos
-        rows, cols = np.where(mask_combined)
-        if len(rows) == 0:
+        if not np.any(mask_combined):
             print("   ❌ No hay datos válidos en los mosaicos")
             return False
         
+        # Encontrar límites de la región con datos
+        rows, cols = np.where(mask_combined)
         min_row, max_row = np.min(rows), np.max(rows)
         min_col, max_col = np.min(cols), np.max(cols)
         
         print(f"   📐 Región con datos: filas {min_row}-{max_row}, columnas {min_col}-{max_col}")
         
-        # Recortar a la región con datos (con un margen del 5%)
-        margin = int(min(data_r.shape) * 0.05)
+        # Añadir margen (reducido para ahorrar memoria)
+        margin = int(min(data_r.shape) * 0.02)  # Solo 2% de margen
         min_row = max(0, min_row - margin)
         max_row = min(data_r.shape[0], max_row + margin)
         min_col = max(0, min_col - margin)
         max_col = min(data_r.shape[1], max_col + margin)
         
+        # Recortar datos
+        print("   ✂️  Recortando datos...")
         data_r_crop = data_r[min_row:max_row, min_col:max_col]
         data_g_crop = data_g[min_row:max_row, min_col:max_col]
         data_b_crop = data_b[min_row:max_row, min_col:max_col]
         
-        print(f"   ✂️  Datos recortados: {data_r_crop.shape}")
+        print(f"   📏 Datos recortados: {data_r_crop.shape}")
         
-        # Normalización mejorada
+        # Liberar memoria de los arrays grandes inmediatamente
+        del data_r, data_g, data_b, mask_r, mask_g, mask_b, mask_combined
+        gc.collect()
+        
+        # Normalización por partes para ahorrar memoria
         print("   📈 Normalizando canales...")
         
-        def normalizar_inteligente(data, low_percent=2, high_percent=98):
+        def normalizar_por_partes(data, low_percent=2, high_percent=98, chunk_size=1000):
+            """Normaliza en chunks para ahorrar memoria"""
             data_pos = data[data > 0]
             if len(data_pos) == 0:
                 return np.zeros_like(data)
@@ -349,71 +374,81 @@ def crear_rgb_mejorado(mosaicos_dict, output_dir, total_campos):
             vmin = np.percentile(data_pos, low_percent)
             vmax = np.percentile(data_pos, high_percent)
             
-            # Suavizar con transformación asinh para mejor rango dinámico
-            data_norm = np.arcsinh((data - vmin) / (vmax - vmin) * 10) / 3
-            data_norm = np.clip(data_norm, 0, 1)
+            # Normalizar en chunks
+            result = np.empty_like(data, dtype=np.float32)
+            for i in range(0, data.shape[0], chunk_size):
+                i_end = min(i + chunk_size, data.shape[0])
+                chunk = data[i:i_end]
+                chunk_norm = np.arcsinh((chunk - vmin) / max(vmax - vmin, 1e-10) * 10) / 3
+                chunk_norm = np.clip(chunk_norm, 0, 1)
+                result[i:i_end] = chunk_norm
             
-            return data_norm
+            return result
         
-        r_norm = normalizar_inteligente(data_r_crop, 1, 99)
-        g_norm = normalizar_inteligente(data_g_crop, 1, 98)
-        b_norm = normalizar_inteligente(data_b_crop, 2, 97)
+        r_norm = normalizar_por_partes(data_r_crop, 1, 99)
+        g_norm = normalizar_por_partes(data_g_crop, 1, 98) 
+        b_norm = normalizar_por_partes(data_b_crop, 2, 97)
         
-        # Combinar RGB
+        # Liberar más memoria
+        del data_r_crop, data_g_crop, data_b_crop
+        gc.collect()
+        
+        # Crear imagen RGB
+        print("   🎨 Combinando canales RGB...")
         rgb_image = np.stack([r_norm, g_norm, b_norm], axis=-1)
         
         # Crear figura
-        fig, ax = plt.subplots(figsize=(16, 14), facecolor='black')
+        print("   🖼️  Creando figura...")
+        fig, ax = plt.subplots(figsize=(12, 10), facecolor='black')
         ax.imshow(rgb_image, origin='lower')
         ax.axis('off')
         
         # Información
         ax.set_title(f'Centaurus A - Mosaico Completo ({total_campos} campos)\nF861(R) + F660(G) + F515(B)', 
-                    color='white', size=16, pad=20)
+                    color='white', size=14, pad=20)
         
         info_text = f'''Coordinates: RA={ra:.4f}°, DEC={dec:.4f}°
 Fields: {total_campos} campos
-Coverage: {mask_combined.sum() / mask_combined.size * 100:.1f}%
-Method: Auto-header + Smart cropping'''
+Size: {rgb_image.shape[1]}×{rgb_image.shape[0]} pixels
+Method: Memory-optimized'''
         
         ax.text(0.02, 0.98, info_text, transform=ax.transAxes, color='white', 
-                fontsize=10, verticalalignment='top', family='monospace',
+                fontsize=9, verticalalignment='top', family='monospace',
                 bbox=dict(boxstyle='round', facecolor='black', alpha=0.7))
         
         # Barra de escala
         altura, ancho = rgb_image.shape[:2]
-        pixel_scale = 0.55
         scale_arcmin = 20
-        scale_pixels = int(scale_arcmin * 60 / pixel_scale)
+        scale_pixels = int(scale_arcmin * 60 / (12.0 / ancho))  # Aproximación
         
         bar_y = altura * 0.05
         bar_x = ancho * 0.05
         
         ax.plot([bar_x, bar_x + scale_pixels], [bar_y, bar_y], 
-                color='yellow', linewidth=4)
+                color='yellow', linewidth=3)
         ax.text(bar_x + scale_pixels/2, bar_y - altura * 0.02, f'{scale_arcmin} arcmin', 
-                color='yellow', ha='center', va='top', fontsize=12, weight='bold')
+                color='yellow', ha='center', va='top', fontsize=10, weight='bold')
         
         # Guardar
         output_path = os.path.join(output_dir, f"mosaico_automatico_{total_campos}campos.png")
-        plt.savefig(output_path, dpi=200, bbox_inches='tight', facecolor='black')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='black')
         print(f"✅ Imagen RGB guardada: {output_path}")
         
-        # Liberar memoria
+        # Liberar memoria final
         plt.close(fig)
-        del data_r, data_g, data_b, data_r_crop, data_g_crop, data_b_crop, rgb_image
+        del r_norm, g_norm, b_norm, rgb_image
         gc.collect()
         
         return True
         
     except Exception as e:
-        print(f"❌ Error en RGB mejorado: {e}")
+        print(f"❌ Error en RGB optimizado: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 if __name__ == "__main__":
-    print("🚀 EJECUTANDO MOSAICO CON HEADER AUTOMÁTICO")
+    print("🚀 EJECUTANDO MOSAICO CON HEADER AUTOMÁTICO OPTIMIZADO")
     print("🎯 Calculando posición y tamaño óptimos")
     print("📁 Directorio base: anac_data")
     
@@ -421,6 +456,10 @@ if __name__ == "__main__":
         print("❌ ERROR: No se encuentra el directorio CenA01")
         print("   Asegúrate de ejecutar este script desde el directorio anac_data")
         sys.exit(1)
+    
+    # Configurar para usar menos memoria
+    os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['MKL_NUM_THREADS'] = '1'
     
     gc.collect()
     
