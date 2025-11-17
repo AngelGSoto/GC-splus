@@ -1040,6 +1040,8 @@ To run:
 3. Procesamiento COMPLETO (todos los campos):
 : python Splus_photometry_final_complete_v2.py --all-fields
 
+The final script is: python ../Programs/Splus_photometry_final_complete_v2_improve.py --all-fields
+
 * Science
 
 * Contact and References

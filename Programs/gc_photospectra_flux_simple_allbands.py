@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Simple photo-spectra generator for high-quality NGC 5128 globular clusters.
-Uses the cleaned catalog with 507 high-quality sources.
-Includes both SPLUS and DECam (Taylor) photometry with correct wavelengths.
+CORREGIDO: Ahora incluye errores DECam correctamente.
 """
 
 import numpy as np
@@ -23,11 +22,11 @@ filter_wavelengths = {
     'F861': 8611,   # J0861 Ca Triplet
     
     # DECam filters with correct central wavelengths from specs
-    'u': 3550,      # DECam u-band (355 nm)
-    'g': 4730,      # DECam g-band (473 nm)  
-    'r': 6420,      # DECam r-band (642 nm)
-    'i': 7840,      # DECam i-band (784 nm)
-    'z': 9260       # DECam z-band (926 nm)
+    'u': 3485,      # DECam u-band (355 nm)
+    'g': 4803,      # DECam g-band (473 nm)  
+    'r': 6250,      # DECam r-band (642 nm)
+    'i': 7660,      # DECam i-band (784 nm)
+    'z': 9110       # DECam z-band (926 nm)
 }
 
 # Colors and markers
@@ -43,6 +42,56 @@ def magnitude_to_flux(mag, wl_angstrom):
     flux = (10**(-0.4 * (mag + 2.41))) / (wl_angstrom**2)
     return flux / 1e-15  # Convert to 1e-15 units
 
+def magnitude_to_flux_error(mag, mag_err, wl_angstrom):
+    """
+    Propagate magnitude error to flux error using proper error propagation.
+    """
+    if np.isnan(mag) or np.isnan(mag_err) or mag >= 50.0 or mag_err <= 0:
+        return np.nan
+    
+    # Constants for error propagation
+    c = (10**(-2.41/2.5)) / (wl_angstrom**2)
+    c /= 1e-15  # Convert to 1e-15 units
+    b = -(1.0 / 2.5)
+    
+    # Calculate flux error using proper error propagation
+    flux_err = np.sqrt(((c * 10**(b * mag))**2) * (np.log(10) * b * mag_err)**2)
+    return flux_err
+
+def get_decam_magnitude_and_error(source, filter_name):
+    """
+    Obtiene magnitud DECam y su error, manejando diferentes formatos de columnas.
+    """
+    # Posibles nombres de columnas para magnitudes
+    mag_columns = [
+        f'{filter_name}mag',      # Formato estándar
+        f'mag_{filter_name}',     # Formato alternativo
+        f'DECam_{filter_name}'    # Otro formato posible
+    ]
+    
+    # Posibles nombres de columnas para errores
+    err_columns = [
+        f'e_{filter_name}mag',    # Formato estándar (de tu CSV)
+        f'err_{filter_name}',     # Formato alternativo
+        f'DECam_{filter_name}_err' # Otro formato posible
+    ]
+    
+    # Buscar magnitud
+    mag = None
+    for col in mag_columns:
+        if col in source and not pd.isna(source[col]) and source[col] < 90:
+            mag = source[col]
+            break
+    
+    # Buscar error
+    mag_err = None
+    for col in err_columns:
+        if col in source and not pd.isna(source[col]) and source[col] > 0:
+            mag_err = source[col]
+            break
+    
+    return mag, mag_err
+
 def plot_photospectrum(source, source_id, output_dir, aperture=3):
     """Plot photo-spectrum for a single source."""
     
@@ -52,9 +101,14 @@ def plot_photospectrum(source, source_id, output_dir, aperture=3):
     ax.spines["top"].set_visible(False)  
     ax.spines["right"].set_visible(False)
     
+    # Collect all points for single connecting line
+    all_fluxes = []
+    all_wavelengths = []
+    all_colors = []
+    all_markers = []
+    all_labels = []
+    
     # Plot SPLUS filters
-    splus_fluxes = []
-    splus_wavelengths = []
     splus_labels = {
         'F378': '[OII] 3770Å', 
         'F395': 'CaHK 3940Å', 
@@ -74,11 +128,18 @@ def plot_photospectrum(source, source_id, output_dir, aperture=3):
             wl = filter_wavelengths[filter]
             flux = magnitude_to_flux(mag, wl)
             
-            # Get error
-            if err_col in source and not pd.isna(source[err_col]):
-                flux_err = magnitude_to_flux(mag - source[err_col], wl) - flux
+            # Get error using proper error propagation
+            if err_col in source and not pd.isna(source[err_col]) and source[err_col] > 0:
+                flux_err = magnitude_to_flux_error(mag, source[err_col], wl)
             else:
                 flux_err = 0.1 * flux  # Default 10% error
+            
+            # Store for connecting line
+            all_fluxes.append(flux)
+            all_wavelengths.append(wl)
+            all_colors.append(SPLUS_COLOR)
+            all_markers.append(SPLUS_MARKER)
+            all_labels.append(splus_labels[filter])
             
             # Plot point and error bar
             ax.errorbar(wl, flux, yerr=flux_err, 
@@ -91,32 +152,33 @@ def plot_photospectrum(source, source_id, output_dir, aperture=3):
             ax.text(wl, flux * 1.05, splus_labels[filter], fontsize=9, 
                    ha='center', va='bottom', color=SPLUS_COLOR, alpha=0.9,
                    fontweight='bold')
-            
-            splus_fluxes.append(flux)
-            splus_wavelengths.append(wl)
     
-    # Plot DECam filters (Taylor et al.)
-    decam_fluxes = []
-    decam_wavelengths = []
+    # Plot DECam filters (Taylor et al.) - CORREGIDO
     decam_labels = {
         'u': 'u 3550Å', 'g': 'g 4730Å', 'r': 'r 6420Å', 
         'i': 'i 7840Å', 'z': 'z 9260Å'
     }
     
     for decam_filter in ['u', 'g', 'r', 'i', 'z']:
-        mag_col = f'{decam_filter}mag'
-        err_col = f'e_{decam_filter}mag'
+        # Usar la nueva función para obtener magnitud y error
+        mag, mag_err = get_decam_magnitude_and_error(source, decam_filter)
         
-        if mag_col in source and not pd.isna(source[mag_col]) and source[mag_col] < 90:
-            mag = source[mag_col]
+        if mag is not None:
             wl = filter_wavelengths[decam_filter]
             flux = magnitude_to_flux(mag, wl)
             
-            # Get error
-            if err_col in source and not pd.isna(source[err_col]):
-                flux_err = magnitude_to_flux(mag - source[err_col], wl) - flux
+            # Get error using proper error propagation
+            if mag_err is not None and mag_err > 0:
+                flux_err = magnitude_to_flux_error(mag, mag_err, wl)
             else:
                 flux_err = 0.1 * flux  # Default 10% error
+            
+            # Store for connecting line
+            all_fluxes.append(flux)
+            all_wavelengths.append(wl)
+            all_colors.append(DECAM_COLOR)
+            all_markers.append(DECAM_MARKER)
+            all_labels.append(decam_labels[decam_filter])
             
             # Plot point and error bar
             ax.errorbar(wl, flux, yerr=flux_err,
@@ -130,21 +192,21 @@ def plot_photospectrum(source, source_id, output_dir, aperture=3):
                    ha='center', va='bottom', color=DECAM_COLOR, alpha=0.9,
                    fontweight='bold')
             
-            decam_fluxes.append(flux)
-            decam_wavelengths.append(wl)
+            # Debug info para el primer source
+            if source_id == 'first_source_debug':
+                print(f"DECam {decam_filter}: mag={mag}, mag_err={mag_err}, flux={flux:.2e}, flux_err={flux_err:.2e}")
     
-    # Connect points with lines (separately for SPLUS and DECam)
-    if len(splus_fluxes) > 1:
-        sort_idx = np.argsort(splus_wavelengths)
-        ax.plot(np.array(splus_wavelengths)[sort_idx], np.array(splus_fluxes)[sort_idx], 
-                '-', color=SPLUS_COLOR, alpha=0.7, linewidth=2, label='_nolegend_',
-                zorder=2)
-    
-    if len(decam_fluxes) > 1:
-        sort_idx = np.argsort(decam_wavelengths)
-        ax.plot(np.array(decam_wavelengths)[sort_idx], np.array(decam_fluxes)[sort_idx], 
-                '-', color=DECAM_COLOR, alpha=0.7, linewidth=2, label='_nolegend_',
-                zorder=2)
+    # Connect ALL points with a single line (sorted by wavelength)
+    if len(all_fluxes) > 1:
+        # Sort by wavelength
+        sort_idx = np.argsort(all_wavelengths)
+        sorted_wavelengths = np.array(all_wavelengths)[sort_idx]
+        sorted_fluxes = np.array(all_fluxes)[sort_idx]
+        
+        # Plot single connecting line through all points
+        ax.plot(sorted_wavelengths, sorted_fluxes, 
+                '-', color='black', alpha=0.5, linewidth=1.5, 
+                label='_nolegend_', zorder=1)
     
     # Customize plot
     ax.set_xlabel('Wavelength (Å)', fontsize=14, fontweight='bold')
@@ -191,11 +253,34 @@ def plot_photospectrum(source, source_id, output_dir, aperture=3):
     
     return output_file
 
+def verify_decam_columns(df):
+    """Verifica qué columnas DECam están presentes en el DataFrame."""
+    print("\n🔍 Verificando columnas DECam en el dataset:")
+    
+    decam_mag_columns = ['umag', 'gmag', 'rmag', 'imag', 'zmag']
+    decam_err_columns = ['e_umag', 'e_gmag', 'e_rmag', 'e_imag', 'e_zmag']
+    
+    available_mag = [col for col in decam_mag_columns if col in df.columns]
+    available_err = [col for col in decam_err_columns if col in df.columns]
+    
+    print(f"   Magnitudes DECam disponibles: {available_mag}")
+    print(f"   Errores DECam disponibles: {available_err}")
+    
+    # Verificar datos para el primer source
+    if len(df) > 0:
+        first_source = df.iloc[0]
+        print(f"\n📊 Datos DECam para el primer source:")
+        for mag_col, err_col in zip(decam_mag_columns, decam_err_columns):
+            if mag_col in df.columns:
+                mag_val = first_source[mag_col]
+                err_val = first_source[err_col] if err_col in df.columns else 'N/A'
+                print(f"   {mag_col}: {mag_val}, error: {err_val}")
+
 def main():
     """Main function to generate all photo-spectra."""
     
     # Configuration
-    CATALOG_PATH = "Results/gc_photometry_CLEAN_FINAL.csv"
+    CATALOG_PATH = "Results_Corrected/all_fields_photometry_COMPLETE_high_quality.csv"
     OUTPUT_DIR = "./photospectra_decam_corrected_allSources"
     APERTURE = 3  # Using aperture 3 as in your cleaned catalog
     
@@ -207,6 +292,9 @@ def main():
     df = pd.read_csv(CATALOG_PATH)
     print(f"Found {len(df)} high-quality sources")
     
+    # Verificar columnas DECam
+    verify_decam_columns(df)
+    
     # Print filter info for verification
     print("\n📊 Using filter wavelengths:")
     for filter, wl in filter_wavelengths.items():
@@ -216,7 +304,7 @@ def main():
     successful_plots = 0
     
     for idx, source in df.iterrows():
-        source_id = source['T17ID'] if 'T17ID' in source else f"GC_{idx}"
+        source_id = source['T17ID'] if 'T17ID' in source and not pd.isna(source['T17ID']) else f"GC_{idx+1:04d}"
         
         try:
             output_file = plot_photospectrum(source, source_id, OUTPUT_DIR, APERTURE)
