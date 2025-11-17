@@ -1,5 +1,5 @@
 # Files to include
-!anac_data/Figs-images/mosaico_simple_24campos.png
+!mosaico_simple_24campos.png
 
 # Ignorar archivos de datos y formatos científicos
 *.fz
