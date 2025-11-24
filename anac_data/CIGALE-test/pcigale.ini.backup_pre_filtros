@@ -1,14 +1,30 @@
-# CIGALE configuration for NGC 5128 Globular Clusters
-# Using registered S-PLUS narrow-band filters
-
+# File containing the input data. The columns are 'id' (name of the
+# object), 'redshift' (if 0 the distance is assumed to be 10 pc),
+# 'distance' (Mpc, optional, if present it will be used in lieu of the
+# distance computed from the redshift), the filter (for instance FUV) or
+# line names (prefixed with 'line.' for the latter, for instance
+# line.H-alpha) for the fluxes, and the names of the physical properties
+# as computed by the code (e.g. dust.luminosity). The uncertainties are
+# given with the same column names with the '_err' suffix. The fluxes
+# and the uncertainties must be in mJy for broadband data, in W/m² for
+# emission lines, and the unit computed by the code for the physical
+# proerties. Fluxes can be positive or negative. Upper limits are
+# indicated with a negative value for the uncertainty. In case some
+# fluxes are missing for some entries, they can be replaced with NaN.
+# This file is optional to generate the configuration file, in
+# particular for the savefluxes module.
 data_file = gc_splus_cigale_custom.txt
 
+# Optional file containing the list of physical parameters... [rest of comment omitted for brevity]
 parameters_file = 
 
+# Módulos SED a usar
 sed_modules = sfhdelayed, bc03, redshifting
 
+# Método estadístico
 analysis_method = pdf_analysis
 
+# Número de núcleos de CPU
 cores = 4
 
 # Bands and emission lines to consider. To take uncertainties into
@@ -19,17 +35,17 @@ cores = 4
 # for instance line.H-alpha, as in the input flux file.
 bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
 
+# Relative error added in quadrature to the uncertainties of the fluxes
+# and the extensive properties. Uncertainties on intensive properties
+# are left unchanged.
+additionalerror = 0.1
+
 # Properties to be considered. All properties are to be given in the
 # rest frame rather than the observed frame. This is the case for
 # instance the equivalent widths and for luminosity densities. The names
 # correspond to those used in the input file with the uncertainties
 # indicated with the _err suffix.
 properties = ,
-
-# Relative error added in quadrature to the uncertainties of the fluxes
-# and the extensive properties. Uncertainties on intensive properties
-# are left unchanged.
-additionalerror = 0.1
 
 
 # Configuration of the SED creation modules.

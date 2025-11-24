@@ -1023,9 +1023,11 @@ esperadas entre sistemas fotométricos y no afectan la utilidad científica de l
 
 * Final
 
-Finally I decide not apply the homogenization, I this this is something arbitrary. 
-I also decide to remove the aper correction, because these are causing a overstimation 
-of the photometry, this is the script:
+Finally I decide not apply the homogenization, I think this is something arbitrary. 
+I also decide to remove the aperture correction, because these are causing a overstimation 
+of the photometry, but still continue a offset between my photometry (S-PLUS) and DECAM.
+Sometime the decam photometry is brighter than S-PLUS and sometime decam is brighter.
+This is the script:
 
 : Splus_photometry_final_complete_v2.py
 
@@ -1041,6 +1043,177 @@ To run:
 : python Splus_photometry_final_complete_v2.py --all-fields
 
 The final script is: python ../Programs/Splus_photometry_final_complete_v2_improve.py --all-fields
+
+# Guía práctica: Uso de filtros personalizados S-PLUS en CIGALE (v2025.x)
+
+## 1. Objetivo del flujo
+
+Permitir el ajuste de SEDs en cúmulos globulares usando fotometría S-PLUS y filtros personalizados en CIGALE, con **configuración moderna y robusta**.
+
+---
+
+## 2. Archivos y estructura necesaria
+
+En tu directorio de trabajo debe haber:
+
+- **Datos de entrada**  
+  Archivo tipo CSV o txt con columnas (ejemplo):  
+  `id, redshift, F0378, F0378_err, F0395, F0395_err, ...`  
+  (ejemplo de nombre: `gc_splus_cigale_custom.txt`)
+
+- **Archivos de transmisión de filtros:**  
+  `F0378.dat`, `F0395.dat`, ..., `F0861.dat`  
+  (formato y generación explicados abajo)
+
+---
+
+## 3. Formato exacto del archivo de filtro para CIGALE
+
+**Cada archivo debe lucir así:**
+
+```txt
+# F0378
+energy
+# S-PLUS F0378 narrow-band filter (3780 Å)
+3600.0 2.261712757389863e-05
+3610.0 3.775019333656148e-05
+... (más datos)
+```
+- La línea `energy` (o `photon` si corresponde) **NUNCA lleva `#`**.
+- Comentarios con `#` permitidos antes o después.
+- Luego, sólo datos numéricos: longitud de onda [Å] y transmisión.
+
+> ⚠️ **NO agregues ninguna línea tipo "Wavelength Transmission", solo los datos numéricos.**
+
+---
+
+## 4. Script recomendado para crear/convertir los filtros
+
+Aquí tienes el script Python para transformar cualquiera de tus archivos originales en archivos válidos para CIGALE:
+
+```python
+import os
+
+def crear_filtros_formato_exacto():
+    """Crea filtros con el formato EXACTO de la documentación de CIGALE"""
+    filtros_info = {
+        'F0378': 'S-PLUS F0378 narrow-band filter (3780 Å)',
+        'F0395': 'S-PLUS F0395 narrow-band filter (3950 Å)',
+        'F0410': 'S-PLUS F0410 narrow-band filter (4100 Å)',
+        'F0430': 'S-PLUS F0430 narrow-band filter (4300 Å)',
+        'F0515': 'S-PLUS F0515 narrow-band filter (5150 Å)',
+        'F0660': 'S-PLUS F0660 narrow-band filter (6600 Å)',
+        'F0861': 'S-PLUS F0861 narrow-band filter (8610 Å)'
+    }
+    for filtro, descripcion in filtros_info.items():
+        archivo_entrada = f"{filtro}.dat"
+        archivo_salida = f"{filtro}_cigale.dat"
+        if os.path.exists(archivo_entrada):
+            with open(archivo_entrada, 'r') as f:
+                datos_originales = [l for l in f if l.strip() and not l.lstrip().startswith("#")]
+            with open(archivo_salida, 'w') as f:
+                f.write(f"# {filtro}\n")
+                f.write("energy\n")
+                f.write(f"# {descripcion}\n")
+                for linea in datos_originales:
+                    f.write(linea)
+            print(f"✅ Generado {archivo_salida}")
+        else:
+            print(f"❌ Falta {archivo_entrada}")
+
+if __name__ == "__main__":
+    crear_filtros_formato_exacto()
+```
+
+---
+
+## 5. Importar los filtros personalizados a la base de datos de CIGALE
+
+Después de tener los archivos correctos (ejemplo, `F0378_cigale.dat`):
+
+```bash
+pcigale-filters add F0378_cigale.dat F0395_cigale.dat F0410_cigale.dat F0430_cigale.dat F0515_cigale.dat F0660_cigale.dat F0861_cigale.dat
+```
+
+Puedes verificar que fueron añadidos exitosamente con:
+
+```bash
+pcigale-filters list | grep F0
+```
+Debes ver tus nombres, descripciones y longitudes de onda.
+
+---
+
+## 6. Generar y editar el archivo de configuración de CIGALE
+
+1. **Genera prototipo de configuración solo la primera vez:**
+    ```bash
+    pcigale genconf
+    ```
+   CIGALE creará/actualizará `pcigale.ini`.
+
+2. **Edítalo a mano** y asegúrate de incluir SOLO tus bandas puras así (el nombre coincide con el listado anterior):
+
+    ```ini
+    bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
+    ```
+
+    NO pongas `_err`, SOLO el nombre puro (CIGALE usará el error si existe la columna *_err*).
+
+3. Asegúrate de tener los módulos (ejemplo):
+
+    ```ini
+    sed_modules = sfhdelayed, bc03, redshifting
+    analysis_method = pdf_analysis
+    data_file = gc_splus_cigale_custom.txt
+    ```
+
+    Ajusta los bloques de los módulos y los parámetros según tus necesidades científicas, inspirándote en la plantilla y tus necesidades (ver ejemplos previos).
+
+---
+
+## 7. Flujo robusto de trabajo y comandos finales
+
+**NUNCA vuelvas a usar `pcigale genconf` después de tu edición manual del `.ini`, pues borraría tus bandas.**
+
+### Comandos recomendados, en orden:
+
+```bash
+# 1. (Solo la primera vez)
+pcigale genconf
+
+# 2. (Si actualizaste un filtro)
+pcigale-filters add F0*.dat  # o tus *_cigale.dat
+
+# 3. Edita y verifica el archivo .ini con las bandas correctas
+
+# 4. Comprueba la configuración:
+pcigale check
+
+# 5. Ejecuta el ajuste:
+pcigale run
+
+# 6. (Opcional) Visualiza plots/fits:
+pcigale plot
+```
+
+---
+
+## 8. Verificación y diagnóstico
+
+- **Tus bandas deben aparecer en la salida de `pcigale-filters list`.**
+- Al hacer `pcigale check`, deben salir como “Bands fitted” y SIN warnings de “not taken into account in the fits.”
+- **Nunca dejes líneas tipo “Wavelength Transmission” antes de los datos en tus .dat.**
+
+---
+
+## 9. Referencias útiles
+
+- [CIGALE documentación oficial](https://cigale.lam.fr/documentation/)
+- [Tutorial: Agregar filtros personalizados](https://cigale.lam.fr/documentation/tutorials/adding-filters/)
+
+---
+**Cualquier duda, verifica la documentación o ejecuta cada comando con el flag `--help`.**
 
 * Science
 
