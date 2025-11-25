@@ -6,14 +6,36 @@ def abmag_to_mjy(mag_ab):
     """Convierte magnitud AB a flujo en mJy"""
     return 3631.0 * 10**(-mag_ab / 2.5)
 
-def mjy_error(mag_ab, mag_err):
-    """Propaga el error de magnitud a error en flujo"""
-    flux = abmag_to_mjy(mag_ab)
-    return flux * (10**(mag_err/2.5) - 1)
+def mjy_error_exacta(mag_ab, mag_err):
+    """
+    Propagación EXACTA de errores usando derivadas
+    σ_flux = |dflux/dmag| * σ_mag = flux * (ln(10)/2.5) * σ_mag
+    """
+    if mag_err <= 0 or mag_ab >= 90:  # Excluir valores especiales
+        return 0.0
+    
+    try:
+        flux = abmag_to_mjy(mag_ab)
+        # Fórmula exacta: σ_f = f * (ln(10)/2.5) * σ_m
+        error_factor = (np.log(10) / 2.5) * mag_err
+        flux_error = flux * error_factor
+        
+        # Validación de resultados
+        if np.isnan(flux_error) or np.isinf(flux_error) or flux_error <= 0:
+            # Fallback: error del 10% del flujo
+            return flux * 0.1
+            
+        return flux_error
+        
+    except Exception as e:
+        # Fallback robusto en caso de error
+        flux = abmag_to_mjy(mag_ab)
+        return flux * 0.1  # Error del 10% por defecto
 
-def preparar_cigale_custom_filters(input_file, output_file, n_objects=10):
+def preparar_cigale_custom_filters(input_file, output_file, n_objects=100):
     """
     Prepara datos para CIGALE usando los nombres exactos de tus archivos de filtros
+    Con propagación EXACTA de errores
     """
     
     # Leer tus datos
@@ -29,7 +51,7 @@ def preparar_cigale_custom_filters(input_file, output_file, n_objects=10):
     
     # Columnas básicas
     cigale_data['id'] = sample_df['T17ID'].fillna(sample_df['recno'])
-    cigale_data['redshift'] = 0.0018  # NGC 5128
+    cigale_data['redshift'] = 0.001825  # NGC 5128 (valor más preciso)
     
     # 🔹 MAPEO: columnas internas → nombres de archivos de filtros
     filter_mapping = {
@@ -42,7 +64,7 @@ def preparar_cigale_custom_filters(input_file, output_file, n_objects=10):
         'F861': 'F0861'
     }
     
-    print("🔄 Conversión de magnitudes AB a flujos mJy...")
+    print("🔄 Conversión de magnitudes AB a flujos mJy (propagación exacta de errores)...")
     
     for internal_name, file_name in filter_mapping.items():
         mag_col = f'MAG_{internal_name}_3'
@@ -59,37 +81,40 @@ def preparar_cigale_custom_filters(input_file, output_file, n_objects=10):
             
             # Usar el nombre del archivo de filtro en el output
             cigale_data[file_name] = abmag_to_mjy(magnitudes)
-            cigale_data[f'{file_name}_err'] = mjy_error(magnitudes, errores_mag)
+            
+            # Propagación EXACTA de errores
+            cigale_data[f'{file_name}_err'] = [
+                mjy_error_exacta(mag, err) for mag, err in zip(magnitudes, errores_mag)
+            ]
             
             # Mostrar ejemplo de conversión
             if sample_df.index[0] == 0:
                 mag_val = magnitudes.iloc[0]
+                err_val = errores_mag.iloc[0]
                 flux_val = cigale_data[file_name].iloc[0]
-                print(f"   {internal_name} → {file_name}: {mag_val:.2f} mag → {flux_val:.2e} mJy")
+                flux_err_val = cigale_data[f'{file_name}_err'].iloc[0]
+                print(f"   {internal_name} → {file_name}: {mag_val:.2f}±{err_val:.3f} mag → {flux_val:.2e}±{flux_err_val:.2e} mJy")
                 
         except Exception as e:
             print(f"❌ Error procesando {internal_name}: {e}")
     
-    # Verificar que los archivos de filtros existan
-    print("\n🔍 Verificando archivos de filtros...")
-    missing_filters = []
-    for file_name in filter_mapping.values():
-        filter_file = f"{file_name}.dat"
-        if os.path.exists(filter_file):
-            print(f"   ✅ {filter_file} encontrado")
-        else:
-            print(f"   ❌ {filter_file} NO encontrado")
-            missing_filters.append(filter_file)
-    
-    if missing_filters:
-        print(f"⚠️  Faltan {len(missing_filters)} archivos de filtros")
-    
-    # Guardar archivo
+    # Guardar archivo (separado por espacios como en tu versión original)
     cigale_data.to_csv(output_file, sep=' ', index=False, float_format='%.6e')
     
     print(f"\n💾 Archivo CIGALE guardado: {output_file}")
     print("📋 Columnas en el archivo:")
     print(f"   {list(cigale_data.columns)}")
+    
+    # Mostrar estadísticas de conversión
+    print(f"\n📊 Estadísticas de conversión:")
+    total_fluxes = 0
+    for file_name in filter_mapping.values():
+        if file_name in cigale_data.columns:
+            n_valid = (cigale_data[file_name] > 0).sum()
+            total_fluxes += n_valid
+            print(f"   {file_name}: {n_valid} flujos válidos")
+    
+    print(f"   TOTAL: {total_fluxes} flujos convertidos")
     
     return cigale_data, filter_mapping
 

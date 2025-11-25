@@ -1044,176 +1044,152 @@ To run:
 
 The final script is: python ../Programs/Splus_photometry_final_complete_v2_improve.py --all-fields
 
-# Guía práctica: Uso de filtros personalizados S-PLUS en CIGALE (v2025.x)
+* Guía Completa: Uso de Filtros Personalizados S-PLUS en CIGALE (v2025.x)
 
-## 1. Objetivo del flujo
+** 1. Objetivo del Flujo
 
-Permitir el ajuste de SEDs en cúmulos globulares usando fotometría S-PLUS y filtros personalizados en CIGALE, con **configuración moderna y robusta**.
+Permitir el ajuste de SEDs en cúmulos globulares usando fotometría S-PLUS y filtros personalizados en CIGALE, con configuración moderna, robusta y científicamente validada.
 
----
+** 2. Arquitectura del Proyecto
+Estructura de Directorios Recomendada
 
-## 2. Archivos y estructura necesaria
+#+BEGIN_SRC sh
+CIGALE-??/
+├── data/
+│   ├── gc_splus_cigale_custom.txt
+│   └── all_fields_photometry_COMPLETE.csv
+├── filters/
+│   ├── F0378.dat, F0395.dat, ...
+│   └── F0378_cigale.dat, ...
+├── scripts/
+│   ├── preparar_datos_cigale.py
+│   ├── iniciar_cigale.py
+│   ├── formatear_filtros_splus_correcto.py
+│   └── proteger_configuracion.py
+└── out/
+#+END_SRC 
 
-En tu directorio de trabajo debe haber:
+Archivos Críticos
 
-- **Datos de entrada**  
-  Archivo tipo CSV o txt con columnas (ejemplo):  
-  `id, redshift, F0378, F0378_err, F0395, F0395_err, ...`  
-  (ejemplo de nombre: `gc_splus_cigale_custom.txt`)
+    - Datos entrada: gc_splus_cigale_custom.txt (formato tabulado)
 
-- **Archivos de transmisión de filtros:**  
-  `F0378.dat`, `F0395.dat`, ..., `F0861.dat`  
-  (formato y generación explicados abajo)
+    - Filtros: F0378_cigale.dat, F0395_cigale.dat, etc.
 
----
+    - Configuración: pcigale.ini (optimizado para cúmulos globulares)
+    
+** 3. Fundamentos Científicos
+- Conversión Magnitudes → Flujos
 
-## 3. Formato exacto del archivo de filtro para CIGALE
+    Sistema AB: m_AB = -2.5 log₁₀(f_ν) - 48.60
 
-**Cada archivo debe lucir así:**
+    Flujo en mJy: f_ν [mJy] = 3631 × 10^(-m_AB/2.5)
 
-```txt
+    Propagación exacta de errores: σ_flux = flux × (ln(10)/2.5) × σ_mag
+
+- Parámetros para Cúmulos Globulares
+
+    Edades: 8-13 Gyr (poblaciones antiguas)
+
+    Metalicidades: 0.0001 a 0.02 (rango completo GCs)
+
+    IMF: Chabrier (más realista para poblaciones antiguas)
+
+    Redshift: 0.001825 (NGC 5128 - valor preciso)
+    
+** 4. Preparación de Filtros Personalizados
+Formato Exacto para CIGALE
+
+#+BEGIN_SRC sh
 # F0378
 energy
 # S-PLUS F0378 narrow-band filter (3780 Å)
 3600.0 2.261712757389863e-05
 3610.0 3.775019333656148e-05
-... (más datos)
-```
-- La línea `energy` (o `photon` si corresponde) **NUNCA lleva `#`**.
-- Comentarios con `#` permitidos antes o después.
-- Luego, sólo datos numéricos: longitud de onda [Å] y transmisión.
+...
+#+END_SRC
 
-> ⚠️ **NO agregues ninguna línea tipo "Wavelength Transmission", solo los datos numéricos.**
+Reglas críticas:
 
----
+    - Línea energy SIN #
 
-## 4. Script recomendado para crear/convertir los filtros
+    - Solo datos numéricos después de comentarios
 
-Aquí tienes el script Python para transformar cualquiera de tus archivos originales en archivos válidos para CIGALE:
+    - No incluir encabezados tipo "Wavelength Transmission"
+    
+Registro en CIGALE
 
-```python
-import os
+#+BEGIN_SRC sh
+pcigale-filters add F0378_cigale.dat F0395_cigale.dat F0410_cigale.dat \
+                    F0430_cigale.dat F0515_cigale.dat F0660_cigale.dat \
+                    F0861_cigale.dat
+#+END_SRC
 
-def crear_filtros_formato_exacto():
-    """Crea filtros con el formato EXACTO de la documentación de CIGALE"""
-    filtros_info = {
-        'F0378': 'S-PLUS F0378 narrow-band filter (3780 Å)',
-        'F0395': 'S-PLUS F0395 narrow-band filter (3950 Å)',
-        'F0410': 'S-PLUS F0410 narrow-band filter (4100 Å)',
-        'F0430': 'S-PLUS F0430 narrow-band filter (4300 Å)',
-        'F0515': 'S-PLUS F0515 narrow-band filter (5150 Å)',
-        'F0660': 'S-PLUS F0660 narrow-band filter (6600 Å)',
-        'F0861': 'S-PLUS F0861 narrow-band filter (8610 Å)'
-    }
-    for filtro, descripcion in filtros_info.items():
-        archivo_entrada = f"{filtro}.dat"
-        archivo_salida = f"{filtro}_cigale.dat"
-        if os.path.exists(archivo_entrada):
-            with open(archivo_entrada, 'r') as f:
-                datos_originales = [l for l in f if l.strip() and not l.lstrip().startswith("#")]
-            with open(archivo_salida, 'w') as f:
-                f.write(f"# {filtro}\n")
-                f.write("energy\n")
-                f.write(f"# {descripcion}\n")
-                for linea in datos_originales:
-                    f.write(linea)
-            print(f"✅ Generado {archivo_salida}")
-        else:
-            print(f"❌ Falta {archivo_entrada}")
+Este script pone las curvas de transmision en formate reconocible para CIGALE:
 
-if __name__ == "__main__":
-    crear_filtros_formato_exacto()
-```
+: formatear_filtros_splus_correcto.py
 
----
+Verificación
 
-## 5. Importar los filtros personalizados a la base de datos de CIGALE
+#+BEGIN_SRC sh
+pcigale-filters list | grep -E "(F0378|F0395|F0410|F0430|F0515|F0660|F0861)"
+#+END_SRC
 
-Después de tener los archivos correctos (ejemplo, `F0378_cigale.dat`):
+** 5. Configuración Optimizada para Cúmulos Globulares
 
-```bash
-pcigale-filters add F0378_cigale.dat F0395_cigale.dat F0410_cigale.dat F0430_cigale.dat F0515_cigale.dat F0660_cigale.dat F0861_cigale.dat
-```
+Estructura del Archivo pcigale.ini
 
-Puedes verificar que fueron añadidos exitosamente con:
+#+BEGIN_SRC sh
+# Módulos para poblaciones antiguas
+sed_modules = sfhdelayed, bc03, redshifting
 
-```bash
-pcigale-filters list | grep F0
-```
-Debes ver tus nombres, descripciones y longitudes de onda.
+# Bands S-PLUS (flujos y errores)
+bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, 
+        F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, 
+        F0861, F0861_err
 
----
+# CRÍTICO: Habilitar generación SEDs
+save_best_sed = True
 
-## 6. Generar y editar el archivo de configuración de CIGALE
+[sed_modules_params]
+  [[sfhdelayed]]
+    tau_main = 100, 500, 1000, 2000
+    age_main = 8000, 10000, 12000, 13000
+  [[bc03]]
+    imf = 1
+    metallicity = 0.0001, 0.0004, 0.004, 0.008, 0.02
+  [[redshifting]]
+    redshift = 0.001825
 
-1. **Genera prototipo de configuración solo la primera vez:**
-    ```bash
-    pcigale genconf
-    ```
-   CIGALE creará/actualizará `pcigale.ini`.
+[analysis_params]
+  variables = stellar.m_star, stellar.metallicity_mw, stellar.age_m_star
+  bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
+  save_best_sed = True
+#+END_SRC
 
-2. **Edítalo a mano** y asegúrate de incluir SOLO tus bandas puras así (el nombre coincide con el listado anterior):
+** 6. Flujo de Trabajo Validado
 
-    ```ini
-    bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
-    ```
+Secuencia de Comandos
 
-    NO pongas `_err`, SOLO el nombre puro (CIGALE usará el error si existe la columna *_err*).
-
-3. Asegúrate de tener los módulos (ejemplo):
-
-    ```ini
-    sed_modules = sfhdelayed, bc03, redshifting
-    analysis_method = pdf_analysis
-    data_file = gc_splus_cigale_custom.txt
-    ```
-
-    Ajusta los bloques de los módulos y los parámetros según tus necesidades científicas, inspirándote en la plantilla y tus necesidades (ver ejemplos previos).
-
----
-
-## 7. Flujo robusto de trabajo y comandos finales
-
-**NUNCA vuelvas a usar `pcigale genconf` después de tu edición manual del `.ini`, pues borraría tus bandas.**
-
-### Comandos recomendados, en orden:
-
-```bash
-# 1. (Solo la primera vez)
+#+BEGIN_SRC sh
+# 1. Configuración inicial (SOLO primera vez)
 pcigale genconf
 
-# 2. (Si actualizaste un filtro)
-pcigale-filters add F0*.dat  # o tus *_cigale.dat
+# 2. EDICIÓN MANUAL CRÍTICA
+# Cambiar en pcigale.ini: save_best_sed = False → True
+# Ajustar parámetros para cúmulos globulares
 
-# 3. Edita y verifica el archivo .ini con las bandas correctas
-
-# 4. Comprueba la configuración:
+# 3. Verificación
 pcigale check
 
-# 5. Ejecuta el ajuste:
+# 4. Ejecución
 pcigale run
 
-# 6. (Opcional) Visualiza plots/fits:
-pcigale plot
-```
-
----
-
-## 8. Verificación y diagnóstico
-
-- **Tus bandas deben aparecer en la salida de `pcigale-filters list`.**
-- Al hacer `pcigale check`, deben salir como “Bands fitted” y SIN warnings de “not taken into account in the fits.”
-- **Nunca dejes líneas tipo “Wavelength Transmission” antes de los datos en tus .dat.**
-
----
-
-## 9. Referencias útiles
-
-- [CIGALE documentación oficial](https://cigale.lam.fr/documentation/)
-- [Tutorial: Agregar filtros personalizados](https://cigale.lam.fr/documentation/tutorials/adding-filters/)
-
----
-**Cualquier duda, verifica la documentación o ejecuta cada comando con el flag `--help`.**
+# 5. Análisis de resultados
+pcigale-plots sed
+pcigale-plots hist -p stellar.m_star
+pcigale-plots hist -p stellar.age_m_star
+#+END_SRC
+sed -i 's/save_best_sed = False/save_best_sed = True/g' pcigale.ini
 
 * Science
 

@@ -19,6 +19,16 @@ additionalerror = float(min=0.0)
     imf = cigale_list(dtype=int, options=0. & 1.)
     metallicity = cigale_list(options=0.0001 & 0.0004 & 0.004 & 0.008 & 0.02 & 0.05)
     separation_age = cigale_list(dtype=int, minvalue=0)
+  [[dustatt_modified_starburst]]
+    E_BV_lines = cigale_list(minvalue=0.)
+    E_BV_factor = cigale_list(minvalue=0., maxvalue=1.)
+    uv_bump_wavelength = cigale_list(minvalue=0.)
+    uv_bump_width = cigale_list()
+    uv_bump_amplitude = cigale_list(minvalue=0.)
+    powerlaw_slope = cigale_list()
+    Ext_law_emission_lines = cigale_list(dtype=int, options=1 & 2 & 3)
+    Rv = cigale_list()
+    filters = string()
   [[redshifting]]
     redshift = cigale_list(minvalue=0.)
 [analysis_params]
