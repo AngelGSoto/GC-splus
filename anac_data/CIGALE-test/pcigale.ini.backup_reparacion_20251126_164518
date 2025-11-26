@@ -1,0 +1,50 @@
+# CIGALE configuration for NGC 5128 Globular Clusters - OPTIMIZED V2
+# Using delayed SFH optimized for globular clusters with S-PLUS photometry
+# Generated: 2025-11-26 16:14:48
+
+data_file = gc_splus_cigale_custom.txt
+parameters_file = 
+
+# MODULES AVAILABLE IN CIGALE 2025.1 - CORRECTED
+sed_modules = sfhdelayed, bc03, dustatt_modified_starburst, redshifting
+
+analysis_method = pdf_analysis
+cores = 8
+
+# Bands and emission lines to consider. To take uncertainties into
+# account, the name of the band or line must be indicated with the _err
+# suffix as in the input flux file. For instance: galex.FUV,
+# galex.FUV_err. The list of allowed bands and lines can be obtained
+# with pcigale-filters list. Line names must be prefixed with 'line.',
+# for instance line.H-alpha, as in the input flux file.
+bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
+
+# Properties to be considered. All properties are to be given in the
+# rest frame rather than the observed frame. This is the case for
+# instance the equivalent widths and for luminosity densities. The names
+# correspond to those used in the input file with the uncertainties
+# indicated with the _err suffix.
+properties = ,
+
+# Relative error added in quadrature to the uncertainties of the fluxes
+# and the extensive properties. Uncertainties on intensive properties
+# are left unchanged.
+additionalerror = 0.05
+
+
+# Configuration of the SED creation modules.
+[sed_modules_params]
+  
+  [[sfhdelayed]]
+    # Delayed SFH optimized for globular clusters (approximating SSP)
+    # Short tau values to simulate single burst populations
+    tau_main = 10, 50, 100, 500
+    # Age range covering typical GC formation (1-13 Gyr)
+    age_main = 1000, 2000, 3000, 5000, 8000, 10000, 13000
+    # No late burst for globular clusters
+    tau_burst = 10
+    age_burst = 10
+    f_burst = 0.0
+    sfr_A = 1.0
+    normalise = True
+
