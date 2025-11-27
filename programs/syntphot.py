@@ -66,14 +66,15 @@ def spec2filterset(filterset, obs_spec, model_spec=None, badpxl_tolerance=0.5):
     filter_ids = np.unique(filterset['ID_filter'])
     mags = np.zeros(len(filter_ids), dtype=[('m_ab', '<f4'), ('e_ab', '<f4')])
     
-    for i_filter in range(len(filter_ids)):
-        filter = filterset[filterset['ID_filter'] == filter_ids[i_filter]]
+    # Use enumerate instead of range(len()) for better performance
+    for i_filter, filter_id in enumerate(filter_ids):
+        filter = filterset[filterset['ID_filter'] == filter_id]
         try:
             mags[i_filter]['m_ab'], mags[i_filter]['e_ab'] = spec2filter(
                 filter, obs_spec, model_spec, badpxl_tolerance
             )
         except Exception as e:
-            log.error(f"Error en filtro {filter_ids[i_filter]}: {str(e)}")
+            log.error(f"Error en filtro {filter_id}: {str(e)}")
             mags[i_filter]['m_ab'] = np.inf
             mags[i_filter]['e_ab'] = np.inf
     

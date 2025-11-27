@@ -19,17 +19,31 @@ class readfilterset(object):
             raise Exception('Unsupported file format.')
               
     def uniform(self, dl=1):
-        aux = []
+        # Vectorized approach: build arrays more efficiently
+        result_parts = []
         for fid in np.unique(self.filterset['ID_filter']):
             xx = self.filterset[self.filterset['ID_filter'] == fid]
             new_lambda = np.arange(xx['wl'].min(), xx['wl'].max(), 1.0)
             new_transm = np.interp(new_lambda, xx['wl'], xx['transm'])
-            for i in range(len(new_lambda)):
-                aux.append((fid, new_lambda[i], new_transm[i]))
-        self.filterset = np.array(aux, dtype=self.filterset.dtype)
+            # Create structured array directly instead of appending tuples
+            n_points = len(new_lambda)
+            filter_data = np.empty(n_points, dtype=self.filterset.dtype)
+            filter_data['ID_filter'] = fid
+            filter_data['wl'] = new_lambda
+            filter_data['transm'] = new_transm
+            result_parts.append(filter_data)
+        # Concatenate all parts at once instead of building list and converting
+        if result_parts:
+            self.filterset = np.concatenate(result_parts)
+        # If no results, keep empty array with same dtype
+        elif hasattr(self, 'filterset') and self.filterset is not None:
+            self.filterset = np.array([], dtype=self.filterset.dtype)
             
     def calc_filteravgwls(self):
-        avg = []
-        for fid in np.unique(self.filterset['ID_filter']):
-            avg.append(np.average(self.filterset[self.filterset['ID_filter'] == fid]['wl']))
-        self.filteravgwls = np.array(avg)
+        # Vectorized calculation of filter average wavelengths
+        unique_filters = np.unique(self.filterset['ID_filter'])
+        avg = np.array([
+            np.average(self.filterset[self.filterset['ID_filter'] == fid]['wl'])
+            for fid in unique_filters
+        ])
+        self.filteravgwls = avg
