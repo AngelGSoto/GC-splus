@@ -1191,6 +1191,10 @@ pcigale-plots hist -p stellar.age_m_star
 #+END_SRC
 sed -i 's/save_best_sed = False/save_best_sed = True/g' pcigale.ini
 
+* Notes
+
+Para colocar en unidade de Fe/H = log(Z/Zsun), Zsun = 0.02
+
 * Science
 
 * Contact and References

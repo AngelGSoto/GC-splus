@@ -1,6 +1,6 @@
 # CIGALE configuration for NGC 5128 Globular Clusters - REPAIRED
 # Optimized for globular clusters with S-PLUS photometry
-# Generated: 2025-11-26 16:45:18
+# Generated: 2025-11-28 16:16:25
 
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
