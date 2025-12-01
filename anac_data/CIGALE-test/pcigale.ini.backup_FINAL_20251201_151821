@@ -1,14 +1,14 @@
 # NGC 5128 Globular Clusters – XSL 2024 (Arentsen+ 2024)
-# pcigale.ini FINAL – XSL 2024 + CIGALE 2025.1 – Cúmulos globulares NGC 5128
-# ESTE FUNCIONA AL 100% – NO TOQUES NADA MÁS
+# Configuración optimizada y corregida para CIGALE 2025.1
+# Generada: 2025-12-01 15:16:58
 
 data_file = gc_splus_cigale_custom.txt
-parameters_file = 
 sed_modules = sfhdelayed, xsl, dustatt_modified_starburst, redshifting
 analysis_method = pdf_analysis
 cores = 12
 
-bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
+bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err,         F0430, F0430_err, F0515, F0515_err, F0660, F0660_err,         F0861, F0861_err
+
 additionalerror = 0.05
 
 [sed_modules_params]
