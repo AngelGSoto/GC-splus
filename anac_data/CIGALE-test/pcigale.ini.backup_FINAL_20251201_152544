@@ -1,61 +1,42 @@
-# CIGALE configuration for NGC 5128 Globular Clusters - REPAIRED
-# Optimized for globular clusters with S-PLUS photometry
-# Generated: 2025-11-28 16:16:25
-
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
-
-sed_modules = sfhdelayed, bc03, dustatt_modified_starburst, redshifting
-
+sed_modules = sfhdelayed, xsl, dustatt_modified_starburst, redshifting
 analysis_method = pdf_analysis
-cores = 8
+cores = 12
 
 bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
-
-properties = ,
-
 additionalerror = 0.05
 
 [sed_modules_params]
-  
   [[sfhdelayed]]
-    # Delayed SFH optimized for globular clusters
     tau_main = 10, 50, 100, 500
-    age_main = 1000, 2000, 3000, 5000, 8000, 10000, 13000
-    tau_burst = 10
+    age_main = 1000, 3000, 5000, 8000, 10000, 12000, 14000
+    tau_burst = 100
     age_burst = 10
     f_burst = 0.0
     sfr_A = 1.0
     normalise = True
-  
-  [[bc03]]
-    # Bruzual & Charlot 2003 with Chabrier IMF
+
+  [[xsl]]
     imf = 1
-    metallicity = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.05
+    metallicity = 0.0004, 0.001, 0.004, 0.008, 0.019
     separation_age = 10
-  
+
   [[dustatt_modified_starburst]]
-    # Minimal dust for globular clusters
     E_BV_lines = 0.00, 0.01, 0.02, 0.05
     E_BV_factor = 0.44
-    uv_bump_wavelength = 217.5
-    uv_bump_width = 35.0
     uv_bump_amplitude = 0.0
     powerlaw_slope = 0.0
-    Ext_law_emission_lines = 1
-    Rv = 3.1
     filters = F0660
-  
+
   [[redshifting]]
-    # Fixed redshift for NGC 5128
     redshift = 0.001825
 
 [analysis_params]
   variables = stellar.m_star, stellar.metallicity, stellar.age_m_star, dust.luminosity
-  bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
   save_best_sed = True
   save_chi2 = none
   lim_flag = noscaling
   mock_flag = False
-  redshift_decimals = 4
+  redshift_decimals = 6
   blocks = 1

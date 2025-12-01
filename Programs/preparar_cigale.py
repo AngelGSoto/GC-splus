@@ -245,7 +245,7 @@ if __name__ == "__main__":
     formato_ok = verificar_formato_archivo(output_file)
     
     # Crear configuración mínima
-    crear_configuracion_minima(output_file, mapeo)
+    # crear_configuracion_minima(output_file, mapeo)
     
     # Generar configuración para pcigale.ini
     print(f"\n{'='*60}")
