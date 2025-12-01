@@ -7,23 +7,18 @@ import glob
 import json
 import matplotlib.pyplot as plt
 import seaborn as sns
+from magnitude_utils import calculate_color_differences_simple
 
 
 pattern = "*-spectros/*-JPLUS13-magnitude.json"
 file_list = glob.glob(pattern)
 
 def filter_mag(e, f1, f2, f3):
-    col, col0 = [], []
-    if data['id'].endswith(e):
-        filter1 = data[f1]
-        filter2 = data[f2]
-        filter3 = data[f3]
-        diff = filter1 - filter2
-        diff0 = filter1 - filter3
-        col.append(diff)
-        col0.append(diff0)
-    
-    return col, col0
+    """
+    Wrapper function that calls the utility function with the global data variable.
+    This version doesn't check the starting string.
+    """
+    return calculate_color_differences_simple(data, e, f1, f2, f3)
 
 def plot_mag(f1, f2, f3):
     x, y = filter_mag("HPNe", f1, f2, f3)
