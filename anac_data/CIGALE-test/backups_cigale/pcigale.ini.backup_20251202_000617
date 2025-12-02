@@ -50,7 +50,7 @@ properties =
     imf = 1
     # Metallicity. Possible values are: 0.0004, 0.004, 0.008, 0.02, 0.03.
     # Manteniendo TUS valores (sabemos que funcionan)
-    metallicity = 0.0004, 0.004, 0.008, 0.02, 0.03
+    metallicity = 0.0001, 0.0004, 0.001, 0.004, 0.008, 0.012, 0.016, 0.020, 0.025, 0.030
     # Age [Myr] of the separation between the young and the old star
     # populations. The default value in 10^7 years (10 Myr). Set to 0 not to
     # differentiate ages (only an old population).

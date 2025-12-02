@@ -1,14 +1,13 @@
 # NGC 5128 Globular Clusters – XSL 2024 (Arentsen+ 2024)
-# VERSIÓN MEJORADA - Basada en tu configuración funcional
+# VERSIÓN FINAL - Configuración optimizada para cúmulos globulares
 
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
 
-# MÓDULOS QUE SABEMOS FUNCIONAN (NO CAMBIAR):
 sed_modules = sfhdelayed, xsl, redshifting
 
 analysis_method = pdf_analysis
-cores = 5
+cores = 8
 
 # Bands to consider. To consider uncertainties too, the name of the band
 # must be indicated with the _err suffix. For instance: FUV, FUV_err.
@@ -27,12 +26,10 @@ properties =
   
   [[sfhdelayed]]
     # e-folding time of the main stellar population model in Myr.
-    # Manteniendo tus valores (funcionan)
     tau_main = 1000.0, 2000.0, 5000.0
     # Age of the main stellar population in the galaxy in Myr. The precision
     # is 1 Myr.
-    # MEJORA: Más valores para mejor muestreo (6 en lugar de 4)
-    age_main = 8000, 9000, 10000, 11000, 12000, 13000
+    age_main = 8000, 10000, 12000, 13000
     # e-folding time of the late starburst population model in Myr.
     tau_burst = 50.0
     # Age of the late burst in Myr. The precision is 1 Myr.
@@ -49,7 +46,6 @@ properties =
     # Initial mass function: 1 (Kroupa)
     imf = 1
     # Metallicity. Possible values are: 0.0004, 0.004, 0.008, 0.02, 0.03.
-    # Manteniendo TUS valores (sabemos que funcionan)
     metallicity = 0.0004, 0.004, 0.008, 0.02, 0.03
     # Age [Myr] of the separation between the young and the old star
     # populations. The default value in 10^7 years (10 Myr). Set to 0 not to
@@ -67,7 +63,6 @@ properties =
   # List of the physical properties to estimate. Leave empty to analyse
   # all the physical properties (not recommended when there are many
   # models).
-  # MEJORA: Mantenemos tus variables (funcionan)
   variables = stellar.m_star, stellar.metallicity, stellar.age_m_star
   # List of bands for which to estimate the fluxes. Note that this is
   # independent from the fluxes actually fitted to estimate the physical

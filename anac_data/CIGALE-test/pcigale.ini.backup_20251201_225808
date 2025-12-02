@@ -1,14 +1,18 @@
 # NGC 5128 Globular Clusters – XSL 2024 (Arentsen+ 2024)
-# VERSIÓN MEJORADA - Basada en tu configuración funcional
+# VERSIÓN OPTIMIZADA MEJORADA - Configuración física realista para GCs
 
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
 
-# MÓDULOS QUE SABEMOS FUNCIONAN (NO CAMBIAR):
-sed_modules = sfhdelayed, xsl, redshifting
+# Módulos optimizados:
+# sfhburst: Brote instantáneo (más realista para GCs que sfhdelayed)
+# xsl: Librería espectral XSL 2024
+# dustatt_modified_starburst: Ley de atenuación con bump 2175Å
+# redshifting: Redshift fijo de NGC 5128
+sed_modules = sfhburst, xsl, dustatt_modified_starburst, redshifting
 
 analysis_method = pdf_analysis
-cores = 5
+cores = 8  # Ajustado para mejor rendimiento (usa ~8 de 12 núcleos)
 
 # Bands to consider. To consider uncertainties too, the name of the band
 # must be indicated with the _err suffix. For instance: FUV, FUV_err.
@@ -25,36 +29,31 @@ properties =
 # Configuration of the SED creation modules.
 [sed_modules_params]
   
-  [[sfhdelayed]]
-    # e-folding time of the main stellar population model in Myr.
-    # Manteniendo tus valores (funcionan)
-    tau_main = 1000.0, 2000.0, 5000.0
-    # Age of the main stellar population in the galaxy in Myr. The precision
-    # is 1 Myr.
-    # MEJORA: Más valores para mejor muestreo (6 en lugar de 4)
-    age_main = 8000, 9000, 10000, 11000, 12000, 13000
-    # e-folding time of the late starburst population model in Myr.
-    tau_burst = 50.0
-    # Age of the late burst in Myr. The precision is 1 Myr.
-    age_burst = 20
-    # Mass fraction of the late burst population.
-    f_burst = 0.0
-    # Multiplicative factor controlling the SFR if normalise is False. For
-    # instance without any burst: SFR(t)=sfr_A×t×exp(-t/τ)/τ²
-    sfr_A = 1.0
-    # Normalise the SFH to produce one solar mass.
-    normalise = True
+  [[sfhburst]]
+    # AGE OF THE BURST (Myr) - Cúmulos globulares antiguos (8-13 Gyr)
+    # Más realista que sfhdelayed para GCs (formación instantánea)
+    age_burst = 8000, 9000, 10000, 11000, 12000, 13000
   
   [[xsl]]
-    # Initial mass function: 1 (Kroupa)
+    # Initial mass function: 1 (Kroupa) - más realista para GCs
     imf = 1
     # Metallicity. Possible values are: 0.0004, 0.004, 0.008, 0.02, 0.03.
-    # Manteniendo TUS valores (sabemos que funcionan)
-    metallicity = 0.0004, 0.004, 0.008, 0.02, 0.03
+    # Añadido 0.0001 para cubrir GCs muy pobres en metales
+    metallicity = 0.0001, 0.0004, 0.004, 0.008, 0.02, 0.03
     # Age [Myr] of the separation between the young and the old star
-    # populations. The default value in 10^7 years (10 Myr). Set to 0 not to
-    # differentiate ages (only an old population).
-    separation_age = 10
+    # populations. Increased to 100 Myr for old populations.
+    separation_age = 100
+  
+  [[dustatt_modified_starburst]]
+    # E(B-V) values for extinction (Milky Way-like extinction with 2175Å bump)
+    # Range includes Galactic extinction towards NGC 5128 (~0.1 mag)
+    E_BV_lines = 0.00, 0.05, 0.10, 0.15, 0.20
+    E_BV_factor = 0.44
+    uv_bump_wavelength = 217.5
+    uv_bump_width = 35.0
+    uv_bump_amplitude = 3.0
+    powerlaw_slope = -0.5
+    Ext_law_emission_lines = 1
   
   [[redshifting]]
     # Redshift of the objects. Leave empty to use the redshifts from the
@@ -67,8 +66,8 @@ properties =
   # List of the physical properties to estimate. Leave empty to analyse
   # all the physical properties (not recommended when there are many
   # models).
-  # MEJORA: Mantenemos tus variables (funcionan)
-  variables = stellar.m_star, stellar.metallicity, stellar.age_m_star
+  # Añadido dust.E_BV para estimar extinción
+  variables = stellar.m_star, stellar.metallicity, stellar.age_m_star, dust.E_BV
   # List of bands for which to estimate the fluxes. Note that this is
   # independent from the fluxes actually fitted to estimate the physical
   # properties.
