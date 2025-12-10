@@ -1,6 +1,6 @@
 RESUMEN DE MEJORAS - CONFIGURACIÓN CIGALE GCs
 ================================================================
-Fecha: 2025-12-02 00:16:28
+Fecha: 2025-12-02 22:04:36
 
 MEJORAS RESPECTO A VERSIÓN ANTERIOR:
 1. MÁS VALORES DE EDAD: 6 en lugar de 4
