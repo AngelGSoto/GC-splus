@@ -1,6 +1,6 @@
 VERIFICACIÓN CONFIGURACIÓN CIGALE - VERSIÓN FINAL
 ================================================================
-Fecha: 2025-12-03 18:00:27
+Fecha: 2025-12-10 17:51:17
 CIGALE versión: 2022.0
 
 METALICIDADES VERIFICADAS EN TU SISTEMA (5 modelos):
