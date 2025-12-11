@@ -1,29 +1,32 @@
 # NGC 5128 Globular Clusters – S-PLUS (CIGALE 2022.0)
-# Configuración con redshift fijo en módulo redshifting
+# VERSIÓN FINAL VERIFICADA: Solo metalicidades disponibles
+# REDSHIFT FIJO: 0.001825 (incluido en archivo de datos)
 
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
 
+# MÓDULOS COMPROBADOS QUE FUNCIONAN:
 sed_modules = sfhdelayed, xsl, redshifting
 
 analysis_method = pdf_analysis
 cores = 5
 
-# BANDS - NO incluir 'redshift' aquí
-# Lista de bandas y sus errores
+# Bands to consider (7 filtros S-PLUS)
 bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
 
-# Error adicional sistemático
 additionalerror = 0.05
 
-# Propiedades a estimar (vacío por ahora)
 properties = 
 
+# Configuration of the SED creation modules.
 [sed_modules_params]
   
-  # Historia de formación estelar: SFH retrasado
   [[sfhdelayed]]
+    # e-folding time in Myr.
+    # VALORES ORIGINALES (funcionan) + un valor intermedio
     tau_main = 500.0, 1000.0, 2000.0, 5000.0
+    # Age in Myr.
+    # Ampliamos el rango y la resolución
     age_main = 5000, 6000, 7000, 8000, 9000, 10000, 11000, 12000, 13000
     tau_burst = 50.0
     age_burst = 20
@@ -31,30 +34,28 @@ properties =
     sfr_A = 1.0
     normalise = True
   
-  # Poblaciones estelares simples: XSL
   [[xsl]]
+    # Initial mass function: 1 (Kroupa/Chabrier)
     imf = 1
+    # METALICIDADES VERIFICADAS que SÍ EXISTEN en CIGALE 2022.0
+    # SOLO ESTAS 5 ESTÁN DISPONIBLES (verificado con ls)
     metallicity = 0.0004, 0.004, 0.008, 0.02, 0.03
+    # Age separation - mantener valor original
     separation_age = 10
   
-  # Corrimiento al rojo: FIJO
   [[redshifting]]
-    # Redshift fijo para todos los objetos (NGC 5128)
-    # NO está en el archivo de datos, se define aquí
-    redshift = 0.001825
+    redshift = from_file  # Ahora se lee del archivo de datos
 
+# Configuration of the statistical analysis method.
 [analysis_params]
-  # Variables físicas a estimar
+  # Physical properties
   variables = stellar.m_star, stellar.metallicity, stellar.age_m_star
   
-  # Bandas usadas en el análisis (sin errores)
+  # Bands for flux estimation
   bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
   
-  # Opciones de salida
   save_best_sed = True
   save_chi2 = none
-  
-  # Opciones de ajuste
   lim_flag = noscaling
   mock_flag = False
   redshift_decimals = 6

@@ -1,6 +1,5 @@
 # NGC 5128 Globular Clusters – S-PLUS (CIGALE 2022.0)
 # VERSIÓN FINAL VERIFICADA: Solo metalicidades disponibles
-# REDSHIFT FIJO: 0.001825 (para todos los objetos)
 
 data_file = gc_splus_cigale_custom.txt
 parameters_file = 
@@ -43,9 +42,6 @@ properties =
     # Age separation - mantener valor original
     separation_age = 10
   
-  [[redshifting]]
-    # REDSHIFT FIJO para todos los objetos (NGC 5128)
-    redshift = 0.001825
 
 # Configuration of the statistical analysis method.
 [analysis_params]

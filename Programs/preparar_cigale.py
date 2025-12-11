@@ -1,270 +1,223 @@
-# preparar_cigale_corregido.py
+# preparar_cigale.py
+# VERSIÓN CORREGIDA: Coloca 'redshift' antes de 'id' en el archivo de salida
+# para garantizar que CIGALE lo detecte correctamente como el primer valor numérico.
+
 import pandas as pd
 import numpy as np
 import os
 
 def abmag_to_mjy(mag_ab):
     """Convierte magnitud AB a flujo en mJy"""
-    if mag_ab >= 90 or np.isnan(mag_ab):  # Manejar valores no válidos
+    if mag_ab >= 90 or np.isnan(mag_ab):
         return 0.0
+    # Conversión: F_mJy = 3631 Jy * 10^(-mag/2.5) * 1000 mJy/Jy
     return 3631.0 * 10**(-mag_ab / 2.5) * 1000
 
-def mjy_error_exacta(mag_ab, mag_err):
+def preparar_datos_para_cigale(input_file, output_file, n_objects=100):
     """
-    Propagación EXACTA de errores usando derivadas
-    σ_flux = |dflux/dmag| * σ_mag = flux * (ln(10)/2.5) * σ_mag
+    Crea archivo perfecto para CIGALE con redshift numérico.
+    Coloca la columna 'redshift' antes que 'id' para evitar el error de tipo de dato
+    cuando se usa redshift = from_file en CIGALE.
     """
-    if mag_err <= 0 or mag_ab >= 90 or np.isnan(mag_ab) or np.isnan(mag_err):
-        return 0.0
+    
+    print("🔧 CREANDO ARCHIVO PARA CIGALE (Redshift primero)")
+    print("=" * 78)
+    
+    if not os.path.exists(input_file):
+        print(f"❌ ERROR: {input_file} no encontrado")
+        return False
     
     try:
-        flux = abmag_to_mjy(mag_ab)
-        if flux <= 0:
-            return 0.0
-            
-        # Fórmula exacta: σ_f = f * (ln(10)/2.5) * σ_m
-        error_factor = (np.log(10) / 2.5) * mag_err
-        flux_error = flux * error_factor
-        
-        # Validación de resultados
-        if np.isnan(flux_error) or np.isinf(flux_error) or flux_error <= 0:
-            return flux * 0.1
-            
-        return flux_error
-        
+        # Asumiendo que el archivo de entrada es un CSV
+        df = pd.read_csv(input_file)
+        print(f"📊 Datos cargados: {len(df)} objetos")
     except Exception as e:
-        print(f"⚠️  Error en propagación: mag={mag_ab}, err={mag_err}, error={e}")
-        flux = abmag_to_mjy(mag_ab)
-        return flux * 0.1
-
-def preparar_cigale_custom_filters(input_file, output_file, n_objects=100):
-    """
-    Prepara datos para CIGALE usando el formato CORRECTO con # en el header
-    """
+        print(f"❌ Error leyendo {input_file}: {e}")
+        return False
     
-    # Leer tus datos
-    df = pd.read_csv(input_file)
-    print(f"📊 Datos cargados: {len(df)} objetos")
+    if n_objects and n_objects < len(df):
+        df = df.head(n_objects).copy()
+        print(f"🔬 Usando muestra: {len(df)} objetos")
     
-    # Seleccionar muestra
-    sample_df = df.head(n_objects).copy()
-    print(f"🔬 Usando {len(sample_df)} objetos para prueba")
-    
-    # Crear DataFrame para CIGALE
-    cigale_data = pd.DataFrame()
-    
-    # Columnas básicas - EXACTAMENTE como en el ejemplo
-    cigale_data['id'] = sample_df['T17ID'].fillna(sample_df['recno']).astype(str)
-    cigale_data['redshift'] = 0.001825  # NGC 5128
-    
-    # 🔹 MAPEO: columnas internas → nombres de archivos de filtros
-    filter_mapping = {
-        'F378': 'F0378',
-        'F395': 'F0395',
-        'F410': 'F0410', 
-        'F430': 'F0430',
-        'F515': 'F0515',
-        'F660': 'F0660',
-        'F861': 'F0861'
+    filter_map = {
+        'F378': 'F0378', 'F395': 'F0395', 'F410': 'F0410',
+        'F430': 'F0430', 'F515': 'F0515', 'F660': 'F0660', 'F861': 'F0861'
     }
     
-    print("🔄 Conversión de magnitudes AB a flujos mJy...")
+    data_rows = []
     
-    for internal_name, file_name in filter_mapping.items():
-        mag_col = f'MAG_{internal_name}_3'
-        err_col = f'MAGERR_{internal_name}_3'
+    print("🔄 Procesando objetos...")
+    for idx, row in df.iterrows():
+        # Obtener ID (usando T17ID, recno o un ID genérico)
+        obj_id = str(row.get('T17ID', row.get('recno', f"obj_{idx+1}")))
+        redshift = 0.001825  # VALOR NUMÉRICO FIJO
         
-        if mag_col not in sample_df.columns:
-            print(f"⚠️  Columna {mag_col} no encontrada")
-            continue
+        # --- CAMBIO CLAVE ---
+        # El orden es [redshift, id, F0378, F0378_err, ...]
+        values = [redshift, obj_id] 
+        # --------------------
+
+        for internal_name, cigale_name in filter_map.items():
+            mag_col = f'MAG_{internal_name}_3'
+            err_col = f'MAGERR_{internal_name}_3'
             
-        try:
-            # Convertir magnitudes a flujos (mJy)
-            magnitudes = sample_df[mag_col].fillna(99.0)
-            errores_mag = sample_df[err_col].fillna(0.0)
+            mag = row.get(mag_col, 99.0)
+            if pd.isna(mag): mag = 99.0
+                
+            err = row.get(err_col, 0.1)
+            if pd.isna(err): err = 0.1
+                
+            if mag >= 90.0:
+                flux = 0.0
+                flux_err = 99.0
+            else:
+                flux = abmag_to_mjy(mag)
+                if err > 0:
+                    # Fórmula estándar para error de flujo a partir de error de magnitud
+                    flux_err = flux * (np.log(10)/2.5) * err
+                else:
+                    # Asignar un error por defecto (ej: 5%)
+                    flux_err = flux * 0.05
             
-            # Usar el nombre del archivo de filtro en el output
-            cigale_data[file_name] = [abmag_to_mjy(mag) for mag in magnitudes]
-            cigale_data[f'{file_name}_err'] = [
-                mjy_error_exacta(mag, err) for mag, err in zip(magnitudes, errores_mag)
-            ]
+            values.append(flux)
+            values.append(flux_err)
             
-        except Exception as e:
-            print(f"❌ Error procesando {internal_name}: {e}")
+        data_rows.append(values)
     
-    # 🔥 CORRECCIÓN: Guardar con formato adecuado para cada tipo de dato
-    print(f"\n💾 Guardando archivo con formato CIGALE correcto (# en header)...")
+    if not data_rows:
+        print("❌ No se generaron datos válidos")
+        return False
+    
+    # --- CAMBIO CLAVE: Orden del HEADER ---
+    header_list = ['redshift', 'id', 'F0378', 'F0378_err', 'F0395', 'F0395_err', 
+                   'F0410', 'F0410_err', 'F0430', 'F0430_err', 'F0515', 'F0515_err', 
+                   'F0660', 'F0660_err', 'F0861', 'F0861_err']
+    # --------------------------------------
+    
+    df_final = pd.DataFrame(data_rows, columns=header_list)
+    
+    # Escribir encabezado comentado
+    header_line = '# ' + ' '.join(header_list) + '\n'
     
     with open(output_file, 'w') as f:
-        # Escribir header con #, separado por espacios
-        header = "# " + " ".join(cigale_data.columns)
-        f.write(header + "\n")
-        
-        # Escribir datos - formatear según el tipo de dato
-        for idx, row in cigale_data.iterrows():
-            formatted_values = []
-            for col, val in row.items():
-                if col == 'id':
-                    # ID como string
-                    formatted_values.append(str(val))
-                elif col == 'redshift':
-                    # Redshift con formato fijo
-                    formatted_values.append(f"{val:.6f}")
-                else:
-                    # Flujos con formato científico
-                    formatted_values.append(f"{val:.6e}")
+        f.write(header_line)
+        # Escribir datos con formato controlado
+        for row in data_rows:
+            # Formato: redshift (float), id (string), flujos (notación científica)
             
-            line = " ".join(formatted_values)
+            # row[0] es redshift, row[1] es id
+            line = f"{row[0]:.6f} {row[1]} " 
+            line += " ".join([f"{val:.6e}" for val in row[2:]])
             f.write(line + "\n")
     
-    print(f"✅ Archivo CIGALE guardado: {output_file}")
+    print(f"\n✅ ARCHIVO CREADO: {output_file}")
+    print(f"     • {len(data_rows)} objetos")
+    print(f"     • Redshift fijo: {redshift:.6f}")
+    print(f"     • Columnas: {len(header_list)} (¡REDSHIFT PRIMERO!)")
     
-    # Mostrar preview del archivo generado
-    print(f"\n📋 PREVIEW del archivo generado:")
+    # Mostrar muestra
+    print(f"\n📋 EJEMPLO (primer objeto):")
+    print("     " + header_line.strip())
     with open(output_file, 'r') as f:
-        for i, line in enumerate(f):
-            if i < 3:  # Mostrar primeras 3 líneas
-                print(f"   {line.strip()}")
-            else:
-                break
-    
-    # Mostrar estadísticas
-    print(f"\n📊 Estadísticas de conversión:")
-    total_fluxes = 0
-    for file_name in filter_mapping.values():
-        if file_name in cigale_data.columns:
-            n_valid = (cigale_data[file_name] > 0).sum()
-            total_fluxes += n_valid
-            print(f"   {file_name}: {n_valid}/{len(cigale_data)} flujos válidos")
-    
-    print(f"   TOTAL: {total_fluxes} flujos convertidos")
-    
-    return cigale_data, filter_mapping
-
-def verificar_formato_archivo(output_file):
-    """Verifica que el archivo tenga el formato correcto para CIGALE"""
-    
-    print(f"\n{'='*60}")
-    print("🔍 VERIFICANDO FORMATO DEL ARCHIVO CIGALE")
-    print(f"{'='*60}")
-    
-    if not os.path.exists(output_file):
-        print(f"❌ Archivo no encontrado: {output_file}")
-        return False
-    
-    with open(output_file, 'r') as f:
-        lineas = f.readlines()
-    
-    if len(lineas) < 2:
-        print("❌ Archivo vacío o con muy pocas líneas")
-        return False
-    
-    # Verificar header
-    header = lineas[0].strip()
-    if not header.startswith("#"):
-        print("❌ ERROR CRÍTICO: Header no comienza con #")
-        print(f"   Header actual: {header}")
-        return False
-    
-    print("✅ Header comienza con # (correcto)")
-    
-    # Verificar estructura de datos
-    datos_linea = lineas[1].strip().split()
-    n_columnas_datos = len(datos_linea)
-    n_columnas_header = len(header.split()) - 1  # Restar el #
-    
-    print(f"   Columnas en header: {n_columnas_header}")
-    print(f"   Columnas en datos: {n_columnas_datos}")
-    
-    if n_columnas_datos != n_columnas_header:
-        print("❌ ERROR: Número de columnas no coincide")
-        return False
-    
-    print("✅ Número de columnas coincide")
-    
-    # Verificar tipos de datos
-    try:
-        # Saltar la primera columna (id) que puede ser string
-        for i, valor in enumerate(datos_linea[1:], 1):  # Empezar desde la segunda columna
-            float(valor)  # Intentar convertir a float
-        print("✅ Todos los valores numéricos son válidos")
-    except ValueError:
-        print("❌ ERROR: Valores no numéricos donde se esperaban números")
-        return False
+        # Leer la segunda línea (el primer objeto de datos)
+        print("     " + f.readlines()[1].strip())
     
     return True
 
-def crear_configuracion_minima(output_file, mapeo_filtros):
-    """Crea un archivo de configuración mínima para CIGALE"""
+def verificar_archivo_cigale(archivo):
+    """Verifica que el archivo sea perfecto para CIGALE"""
     
-    config_content = f"""# CIGALE minimal configuration for S-PLUS globular clusters
-# Generated automatically
-
-data_file = {output_file}
-
-sed_modules = sfhdelayed, bc03, redshifting
-
-analysis_method = pdf_analysis
-cores = 8
-
-bands = {", ".join([f"{name}, {name}_err" for name in mapeo_filtros.values()])}
-
-[sed_modules_params]
-  [[sfhdelayed]]
-    tau_main = 100, 1000
-    age_main = 1000, 5000, 10000
-    sfr_A = 1.0
-    normalise = True
-  [[bc03]]
-    imf = 1
-    metallicity = 0.02
-  [[redshifting]]
-    redshift = 0.001825
-
-[analysis_params]
-  variables = stellar.metallicity
-  save_best_sed = True
-"""
+    if not os.path.exists(archivo):
+        print(f"❌ {archivo} no existe")
+        return False
     
-    with open('pcigale_minimal.ini', 'w') as f:
-        f.write(config_content)
+    print(f"\n🔍 VERIFICACIÓN FINAL: {archivo}")
+    print("-" * 60)
     
-    print("✅ Configuración mínima creada: pcigale_minimal.ini")
+    # Leer manualmente la primera línea
+    with open(archivo, 'r') as f:
+        header_line = f.readline().strip()
+    
+    print(f"📋 Cabecera: {header_line}")
+    
+    # Verificar que empiece con #
+    if not header_line.startswith('# '):
+        print("⚠️  ADVERTENCIA: La cabecera no comienza con '# '")
+    
+    # Leer los datos con pandas
+    try:
+        # Extraer nombres de columnas del encabezado
+        column_names = header_line[2:].split()  # Quitar '# ' y dividir
+        
+        # Leer datos
+        # Usamos '\s+' para manejar cualquier separación (espacio, tabulador)
+        df = pd.read_csv(archivo, sep=r'\s+', skiprows=1, names=column_names)
+        
+        print(f"✅ Datos leídos: {len(df)} filas, {len(df.columns)} columnas")
+        
+        # Verificar columnas esenciales
+        if 'redshift' not in df.columns:
+            print("❌ ERROR: No hay columna 'redshift'")
+            return False
+        
+        # Verificar si 'redshift' es la primera columna
+        if df.columns[0] != 'redshift':
+            print(f"⚠️  ADVERTENCIA: La columna 'redshift' no es la primera columna (es '{df.columns[0]}').")
+        else:
+            print("✅ 'redshift' es la primera columna, ¡excelente!")
+
+        
+        # Verificar si el tipo de dato es numérico
+        if not pd.api.types.is_numeric_dtype(df['redshift']):
+            print("❌ ERROR: 'redshift' no es numérico")
+            print(f"  Tipo: {df['redshift'].dtype}")
+            print(f"  Primer valor: {df['redshift'].iloc[0]}")
+            return False
+        
+        print(f"✅ 'redshift' es numérico: {df['redshift'].dtype}")
+        print(f"📊 Valores: min={df['redshift'].min():.6f}, max={df['redshift'].max():.6f}")
+        
+        # Verificar que todos los redshifts sean iguales (fijo)
+        if df['redshift'].nunique() == 1:
+            print(f"✅ Todos los objetos tienen el mismo redshift: {df['redshift'].iloc[0]}")
+        else:
+            print(f"⚠️  ADVERTENCIA: Los redshifts no son todos iguales")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error al verificar: {e}")
+        return False
 
 if __name__ == "__main__":
-    input_file = "../Results_Corrected/all_fields_photometry_COMPLETE_high_quality.csv"
-    output_file = "gc_splus_cigale_custom.txt"
+    # RUTA DE ARCHIVOS: AJÚSTALA SI ES NECESARIO
+    input_csv = "../Results_Corrected/all_fields_photometry_COMPLETE_high_quality.csv"
+    output_txt = "gc_splus_cigale_custom.txt"
     
-    print("🔧 PREPARADOR DE DATOS CIGALE - FORMATO CORREGIDO")
-    print("=" * 70)
+    # Número de objetos a procesar (para pruebas rápidas)
+    N_OBJECTS_TEST = 10 
     
-    # Preparar datos
-    datos_cigale, mapeo = preparar_cigale_custom_filters(input_file, output_file, n_objects=100)
+    print("🚀 PREPARANDO DATOS PARA CIGALE")
+    print("=" * 78)
     
-    # Verificar formato
-    formato_ok = verificar_formato_archivo(output_file)
-    
-    # Crear configuración mínima
-    # crear_configuracion_minima(output_file, mapeo)
-    
-    # Generar configuración para pcigale.ini
-    print(f"\n{'='*60}")
-    print("🎯 CONFIGURACIÓN PARA pcigale.ini")
-    print(f"{'='*60}")
-    
-    bands_list = []
-    for name in mapeo.values():
-        bands_list.extend([name, f"{name}_err"])
-    bands_str = ", ".join(bands_list)
-    
-    print("Copia esto en tu pcigale.ini:")
-    print(f"bands = {bands_str}")
-    
-    print(f"\n💡 Comando para ejecutar CIGALE:")
-    print(f"   pcigale run -c pcigale_minimal.ini")
-    
-    if formato_ok:
-        print(f"\n✅ ARCHIVO LISTO para CIGALE")
-        print(f"   Ejecuta: pcigale run -c pcigale_minimal.ini")
-    else:
-        print(f"\n❌ PROBLEMAS con el formato del archivo")
+    # 1. Crear archivo
+    if preparar_datos_para_cigale(input_csv, output_txt, n_objects=N_OBJECTS_TEST):
+        # 2. Verificar
+        if verificar_archivo_cigale(output_txt):
+            print("\n" + "=" * 78)
+            print("🎉 ¡ARCHIVO LISTO PARA CIGALE!")
+            print("🎉 ¡EL ERROR DE TIPO DE DATO DEBE ESTAR SOLUCIONADO!")
+            print("=" * 78)
+            
+            print("\n📋 RESUMEN:")
+            print(f"  1. Archivo creado: {output_txt}")
+            print(f"  2. {N_OBJECTS_TEST} objetos procesados")
+            print(f"  3. Redshift numérico: 0.001825 (¡POSICIÓN CORREGIDA!)")
+            
+            print("\n🚀 PASOS A SEGUIR:")
+            print("  1. ASEGÚRATE DE QUE TU pcigale.ini TENGA:")
+            print("     [[redshifting]]")
+            print("       redshift = from_file")
+            print("\n  2. EJECUTA:")
+            print("     pcigale check  # ¡Debería funcionar!")
+            print("     pcigale run    # ¡Debería completar sin errores!")
