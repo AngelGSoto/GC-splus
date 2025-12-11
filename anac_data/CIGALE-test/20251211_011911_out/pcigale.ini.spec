@@ -1,5 +1,0 @@
-data_file = string()
-parameters_file = string()
-sed_modules = cigale_string_list()
-analysis_method = string()
-cores = integer(min=1)
