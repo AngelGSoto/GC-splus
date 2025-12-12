@@ -1044,7 +1044,7 @@ To run:
 
 The final script is: python ../Programs/Splus_photometry_final_complete_v2_improve.py --all-fields
 
-* Guía Completa: Uso de Filtros Personalizados S-PLUS en CIGALE (v2025.x)
+* Guía Completa: Uso de Filtros Personalizados S-PLUS en CIGALE (v2022.1)
 
 ** 1. Objetivo del Flujo
 
@@ -1165,6 +1165,8 @@ save_best_sed = True
   bands = F0378, F0395, F0410, F0430, F0515, F0660, F0861
   save_best_sed = True
 #+END_SRC
+
+Pero voy a usar XSL library.
 
 ** 6. Flujo de Trabajo Validado
 
