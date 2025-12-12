@@ -104,7 +104,7 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
 
 if __name__ == "__main__":
     input_csv = "../Results_Corrected/all_fields_photometry_COMPLETE_high_quality.csv"
-    N_OBJECTS_TEST = 10  # None para todos
+    N_OBJECTS_TEST = 200  # None para todos
     
     preparar_datos_redshift_primero(input_csv, n_objects=N_OBJECTS_TEST)
     
