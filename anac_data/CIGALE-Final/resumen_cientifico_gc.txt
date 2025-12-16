@@ -4,7 +4,7 @@ RESUMEN CIENTÍFICO - CÚMULOS GLOBULARES NGC 5128
 
 ANÁLISIS FOTOMÉTRICO USANDO CIGALE
 Muestra total: 200 cúmulos globulares
-Fecha del análisis: 2025-12-12 18:22:40
+Fecha del análisis: 2025-12-13 00:29:08
 
 1. DISTRIBUCIÓN DE EDADES:
    • Rango: 5.0 - 13.0 Gyr

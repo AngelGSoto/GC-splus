@@ -1,0 +1,26 @@
+Statistical Analysis of Age-Metallicity Relation
+==================================================
+
+Sample size: 200
+
+Age statistics (Gyr):
+  Min: 3.20
+  Max: 11.98
+  Mean: 7.74 ± 2.22
+  Median: 7.33
+
+Metallicity statistics ([Fe/H]):
+  Min: -1.37
+  Max: 0.18
+  Mean: -0.03 ± 0.24
+  Median: 0.02
+
+Correlation analysis:
+  Pearson r = 0.5768 (p = 3.9658e-19)
+  Spearman ρ = 0.8196 (p = 8.7550e-50)
+
+Linear regression:
+  Slope: 0.0616 ± 0.0062
+  Intercept: -0.5064
+  R² = 0.3327
+  Equation: [Fe/H] = 0.062 × Age + -0.506
