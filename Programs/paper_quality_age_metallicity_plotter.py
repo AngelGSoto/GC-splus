@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-paper_quality_age_metallicity_plotter_CORREGIDO_FINAL.py
-========================================================
+paper_quality_age_metallicity_plotter_FINAL_SIMPLE.py
+=====================================================
 
-Script CORREGIDO que usa los valores BAYESIANOS de CIGALE (continuos)
-en lugar de los valores "best" (discretos del grid).
-
-Cambios principales:
-1. Usa bayes.stellar.age_m_star en lugar de best.sfh.age_main
-2. Usa bayes.stellar.metallicity en lugar de best.stellar.metallicity
-3. Los valores bayesianos son CONTINUOS y representan promedios sobre el grid
+Versión final simplificada con texto unificado en una sola caja.
 
 Autor: Luis A. Gutiérrez Soto
-Versión: 3.0 (Usa valores bayesianos correctos)
+Versión: 9.0 (Versión simplificada)
 """
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 from matplotlib import cm
-from matplotlib.colors import LogNorm, Normalize
-from scipy import stats
 import warnings
 import argparse
 import sys
@@ -36,150 +27,105 @@ warnings.filterwarnings('ignore')
 # CONFIGURACIÓN DE ESTILO
 # ============================================================================
 
-def setup_publication_style(style='aa', font_size=9):
-    """Configura estilo para publicaciones."""
-    
-    styles = {
-        'aa': {
-            'font.family': 'serif',
-            'font.serif': ['Times New Roman', 'Times'],
-            'font.size': 9,
-            'axes.titlesize': 10,
-            'axes.labelsize': 9,
-            'xtick.labelsize': 8,
-            'ytick.labelsize': 8,
-            'legend.fontsize': 8,
-            'figure.titlesize': 11,
-            'figure.dpi': 300,
-            'savefig.dpi': 600,
-            'savefig.format': 'pdf',
-            'axes.linewidth': 0.8,
-            'lines.linewidth': 1.0,
-            'lines.markersize': 4,
-            'patch.linewidth': 0.6,
-            'xtick.major.width': 0.6,
-            'ytick.major.width': 0.6,
-            'grid.linewidth': 0.4,
-            'axes.grid': False,
-            'mathtext.fontset': 'stix',
-        }
-    }
-    
-    if style in styles:
-        plt.rcParams.update(styles[style])
-    else:
-        plt.rcParams.update(styles['aa'])
-    
-    return {
-        'blue': '#1f77b4', 'orange': '#ff7f0e', 'green': '#2ca02c',
-        'red': '#d62728', 'purple': '#9467bd', 'yellow': '#bcbd22'
-    }
+def setup_style():
+    """Configura estilo para paper."""
+    plt.rcParams.update({
+        'font.family': 'serif',
+        'font.serif': ['Times New Roman', 'Times'],
+        'font.size': 10,
+        'axes.titlesize': 11,
+        'axes.labelsize': 10,
+        'xtick.labelsize': 9,
+        'ytick.labelsize': 9,
+        'figure.titlesize': 12,
+        'figure.dpi': 300,
+        'savefig.dpi': 600,
+        'savefig.format': 'pdf',
+        'axes.linewidth': 1.0,
+        'lines.linewidth': 1.5,
+        'lines.markersize': 5,
+        'patch.linewidth': 0.8,
+        'xtick.major.width': 0.8,
+        'ytick.major.width': 0.8,
+        'grid.linewidth': 0.5,
+        'axes.grid': True,
+        'grid.alpha': 0.2,
+        'mathtext.fontset': 'stix',
+    })
 
 # ============================================================================
-# CLASE PRINCIPAL CORREGIDA
+# CLASE PRINCIPAL SIMPLIFICADA
 # ============================================================================
 
 class AgeMetallicityPlotter:
-    """Plotter que usa valores BAYESIANOS de CIGALE."""
+    """Plotter para paper con texto simplificado."""
     
-    def __init__(self, results_file, output_dir='paper_plots_corrected', style='aa'):
+    def __init__(self, results_file, experiment='narrow', output_dir='paper_plots_final'):
         self.results_file = Path(results_file)
+        self.experiment = experiment
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True, parents=True)
         
-        self.colors = setup_publication_style(style)
-        self.style = style
+        setup_style()
         
-        # Cargar y validar datos
-        self.data = self.load_and_validate_data()
+        # Cargar datos
+        self.data = self.load_data()
         
         # Configuración
         self.config = {
             'age_unit': 'Gyr',
             'metallicity_unit': '[Fe/H]',
             'sun_metallicity': 0.02,
-            'solar_color': '#FFD700',
+            'solar_color': '#FF8C00',
             'cmap_scatter': 'viridis',
-            'size_scatter': 25,
-            'alpha_scatter': 0.7,
-            'font_size': 9,
+            'size_scatter': 35,
+            'alpha_scatter': 0.8,
         }
         
         print(f"✅ Cargados {len(self.data)} objetos")
+        print(f"📋 Experimento: {self.get_experiment_display_name()}")
     
-    def load_and_validate_data(self):
-        """Carga datos y verifica que existen columnas bayesianas."""
-        print("📊 CARGANDO DATOS BAYESIANOS DE CIGALE...")
+    def get_experiment_display_name(self):
+        """Obtiene el nombre para mostrar del experimento."""
+        experiments = {
+            'narrow': 'S-PLUS (narrow)',
+            'narrow+broad': 'S-PLUS (narrow) + DECam',
+            'splus_only': 'S-PLUS (narrow)',
+            'splus_decam': 'S-PLUS (narrow) + DECam',
+            'narrow_only': 'S-PLUS (narrow)',
+            'full': 'S-PLUS (narrow) + DECam'
+        }
+        return experiments.get(self.experiment, f"Experiment: {self.experiment}")
+    
+    def get_experiment_filename_part(self):
+        """Obtiene la parte del nombre de archivo para el experimento."""
+        filename_parts = {
+            'narrow': 'narrow_only',
+            'narrow+broad': 'narrow_decam',
+            'splus_only': 'splus_only',
+            'splus_decam': 'splus_decam',
+            'narrow_only': 'narrow_only',
+            'full': 'narrow_decam'
+        }
+        return filename_parts.get(self.experiment, self.experiment.replace('+', '_'))
+    
+    def load_data(self):
+        """Carga datos del archivo FITS."""
+        print("📊 CARGANDO DATOS...")
         
-        if not self.results_file.exists():
-            raise FileNotFoundError(f"No se encuentra: {self.results_file}")
-        
-        # Cargar FITS
         with fits.open(self.results_file) as hdul:
             data = Table(hdul[1].data).to_pandas()
         
-        # VERIFICAR COLUMNAS BAYESIANAS
-        required_bayes_columns = [
-            'bayes.stellar.age_m_star',
-            'bayes.stellar.metallicity'
-        ]
-        
-        missing = []
-        for col in required_bayes_columns:
-            if col not in data.columns:
-                missing.append(col)
-        
-        if missing:
-            print(f"🚨 ERROR: Columnas bayesianas faltantes: {missing}")
-            print(f"📋 Columnas disponibles:")
-            for col in data.columns[:20]:
-                if 'bayes' in col or 'best' in col:
-                    print(f"   • {col}")
-            
-            # Intentar con valores 'best' como fallback
-            print(f"\n⚠️  Intentando con columnas 'best'...")
-            if 'best.sfh.age_main' in data.columns and 'best.stellar.metallicity' in data.columns:
-                print(f"✅ Usando columnas 'best' como fallback")
-            else:
-                raise ValueError("No se encuentran columnas bayesianas ni 'best'")
-        
         return data
     
-    def get_correct_columns(self):
-        """Determina las columnas correctas a usar."""
+    def prepare_data(self):
+        """Prepara los datos para plotting."""
+        print("\n📊 PREPARANDO DATOS...")
         
-        # Prioridad 1: Columnas bayesianas
-        if 'bayes.stellar.age_m_star' in self.data.columns:
-            age_col = 'bayes.stellar.age_m_star'
-            print(f"✅ Usando columna bayesiana de edad: {age_col}")
-        elif 'best.sfh.age_main' in self.data.columns:
-            age_col = 'best.sfh.age_main'
-            print(f"⚠️  Usando columna 'best' de edad (no bayesiana): {age_col}")
-        else:
-            raise ValueError("No se encuentra columna de edad")
+        # Usar columnas bayesianas
+        age_col = 'bayes.stellar.age_m_star'
+        metal_col = 'bayes.stellar.metallicity'
         
-        if 'bayes.stellar.metallicity' in self.data.columns:
-            metal_col = 'bayes.stellar.metallicity'
-            print(f"✅ Usando columna bayesiana de metalicidad: {metal_col}")
-        elif 'best.stellar.metallicity' in self.data.columns:
-            metal_col = 'best.stellar.metallicity'
-            print(f"⚠️  Usando columna 'best' de metalicidad (no bayesiana): {metal_col}")
-        else:
-            raise ValueError("No se encuentra columna de metalicidad")
-        
-        return age_col, metal_col
-    
-    def prepare_correct_data(self):
-        """
-        Prepara los datos usando columnas CORRECTAS (bayesianas preferidas).
-        """
-        age_col, metal_col = self.get_correct_columns()
-        
-        print(f"\n📊 PREPARANDO DATOS CORRECTOS:")
-        print(f"   • Edad: {age_col}")
-        print(f"   • Metalicidad: {metal_col}")
-        
-        # Extraer datos
         age = pd.to_numeric(self.data[age_col], errors='coerce')
         metallicity = pd.to_numeric(self.data[metal_col], errors='coerce')
         
@@ -190,374 +136,248 @@ class AgeMetallicityPlotter:
         
         print(f"   • Objetos válidos: {len(age)}")
         
-        # Convertir edad de Myr a Gyr si es necesario
+        # Convertir edad de Myr a Gyr
         if age.mean() > 1000:
             age = age / 1000.0
-            print("   • Edad convertida: Myr → Gyr")
         
-        # Convertir Z a [Fe/H] si es necesario
+        # Convertir Z a [Fe/H]
         z_sun = self.config['sun_metallicity']
-        
-        # Verificar si son Z o [Fe/H]
-        metal_mean = metallicity.mean()
-        metal_min = metallicity.min()
-        metal_max = metallicity.max()
-        
-        print(f"   • Rango metalicidad cruda: [{metal_min:.4f}, {metal_max:.4f}]")
-        
-        # Criterios para determinar si es Z
-        is_likely_Z = (
-            metal_min >= 0 and 
-            metal_max <= 0.1 and
-            abs(metal_mean - 0.02) < 0.1
-        )
-        
-        if is_likely_Z:
-            # Convertir Z a [Fe/H]
+        if metallicity.min() >= 0 and metallicity.max() <= 0.1:
             valid_mask = metallicity > 0
             feh = np.full_like(metallicity, np.nan)
             feh[valid_mask] = np.log10(metallicity[valid_mask] / z_sun)
-            
-            print(f"   • Convertido: Z → [Fe/H] (Z_sun = {z_sun})")
-            print(f"   • Rango [Fe/H]: [{feh[valid_mask].min():.3f}, {feh[valid_mask].max():.3f}]")
-            
             metallicity = pd.Series(feh, index=metallicity.index)
-        else:
-            print(f"   • Ya parece ser [Fe/H] (no se convirtió)")
         
-        # Estadísticas
-        print(f"\n📈 ESTADÍSTICAS FINALES:")
-        print(f"   • Edad: {age.min():.2f} - {age.max():.2f} Gyr")
-        print(f"   • [Fe/H]: {metallicity.min():.3f} - {metallicity.max():.3f} dex")
-        print(f"   • ⟨Edad⟩: {age.mean():.2f} ± {age.std():.2f} Gyr")
-        print(f"   • ⟨[Fe/H]⟩: {metallicity.mean():.3f} ± {metallicity.std():.3f} dex")
-        
-        return age.values, metallicity.values, age_col, metal_col
+        return age.values, metallicity.values
     
-    def plot_correct_scatter(self, show_histograms=True, show_regression=True,
-                           figsize=(7, 6), filename=None):
-        """Gráfico con datos CORRECTOS (bayesianos)."""
+    def create_final_plot(self):
+        """Crea el gráfico final simplificado."""
         
-        age, metallicity, age_col, metal_col = self.prepare_correct_data()
+        age, metallicity = self.prepare_data()
         
-        # Crear figura
-        if show_histograms:
-            fig = plt.figure(figsize=figsize)
-            gs = fig.add_gridspec(2, 2, width_ratios=[4, 1], height_ratios=[1, 4],
-                                 left=0.15, right=0.95, bottom=0.15, top=0.95,
-                                 wspace=0.05, hspace=0.05)
-            ax_scatter = fig.add_subplot(gs[1, 0])
-            ax_histx = fig.add_subplot(gs[0, 0], sharex=ax_scatter)
-            ax_histy = fig.add_subplot(gs[1, 1], sharey=ax_scatter)
-            
-            plt.setp(ax_histx.get_xticklabels(), visible=False)
-            plt.setp(ax_histy.get_yticklabels(), visible=False)
-            
-            # Histogramas
-            ax_histx.hist(age, bins=20, alpha=0.3, color=self.colors['blue'], density=True)
-            ax_histx.set_ylabel('Density', fontsize=self.config['font_size']-1)
-            
-            ax_histy.hist(metallicity, bins=20, orientation='horizontal',
-                         alpha=0.3, color=self.colors['red'], density=True)
-            ax_histy.set_xlabel('Density', fontsize=self.config['font_size']-1)
-        else:
-            fig, ax_scatter = plt.subplots(figsize=figsize)
+        # ====================================================================
+        # CONFIGURACIÓN DE LA FIGURA
+        # ====================================================================
+        fig = plt.figure(figsize=(8.5, 6))
+        
+        # Grid de 2 filas y 3 columnas
+        gs = fig.add_gridspec(2, 3, 
+                             width_ratios=[4, 0.15, 1],
+                             height_ratios=[1, 4],
+                             left=0.08, right=0.95,
+                             bottom=0.12, top=0.90,
+                             wspace=0.1, hspace=0.05)
+        
+        # ====================================================================
+        # PANEL PRINCIPAL (scatter plot)
+        # ====================================================================
+        ax_main = fig.add_subplot(gs[1, 0])
         
         # Scatter plot con densidad
-        if len(age) > 30:
-            from scipy.stats import gaussian_kde
-            try:
-                xy = np.vstack([age, metallicity])
-                z = gaussian_kde(xy)(xy)
-                idx = z.argsort()
-                
-                scatter = ax_scatter.scatter(age[idx], metallicity[idx], c=z[idx],
-                                           s=self.config['size_scatter'],
-                                           alpha=self.config['alpha_scatter'],
-                                           cmap=self.config['cmap_scatter'],
-                                           edgecolors='white', linewidth=0.3)
-                
-                cbar = plt.colorbar(scatter, ax=ax_scatter, pad=0.02)
-                cbar.set_label('Point Density', rotation=270, labelpad=15,
-                             fontsize=self.config['font_size']-1)
-            except:
-                ax_scatter.scatter(age, metallicity, s=self.config['size_scatter'],
-                                 alpha=self.config['alpha_scatter'],
-                                 color=self.colors['blue'], edgecolors='black', linewidth=0.3)
-        else:
-            ax_scatter.scatter(age, metallicity, s=self.config['size_scatter'],
-                             alpha=self.config['alpha_scatter'],
-                             color=self.colors['blue'], edgecolors='black', linewidth=0.3)
+        from scipy.stats import gaussian_kde
+        xy = np.vstack([age, metallicity])
+        z = gaussian_kde(xy)(xy)
+        idx = z.argsort()
+        
+        scatter = ax_main.scatter(age[idx], metallicity[idx], 
+                                c=z[idx],
+                                s=self.config['size_scatter'],
+                                alpha=self.config['alpha_scatter'],
+                                cmap=self.config['cmap_scatter'],
+                                edgecolors='white',
+                                linewidth=0.5,
+                                zorder=5)
         
         # Línea solar
-        ax_scatter.axhline(y=0, color=self.config['solar_color'], 
-                         linestyle='--', linewidth=1.5, alpha=0.8,
-                         label='Solar metallicity')
+        ax_main.axhline(y=0, 
+                       color=self.config['solar_color'],
+                       linestyle='--', 
+                       linewidth=2.0,
+                       alpha=0.8,
+                       zorder=3)
         
-        # Regresión
-        if show_regression and len(age) > 10:
-            try:
-                slope, intercept, r_value, p_value, std_err = stats.linregress(age, metallicity)
-                
-                x_fit = np.linspace(age.min(), age.max(), 100)
-                y_fit = intercept + slope * x_fit
-                
-                ax_scatter.plot(x_fit, y_fit, color=self.colors['red'], 
-                              linewidth=2, linestyle='-', alpha=0.8,
-                              label=f'Fit: [Fe/H] = {slope:.3f} × Age + {intercept:.3f}')
-                
-                # Estadísticas de regresión
-                reg_text = f'$r = {r_value:.3f}$'
-                if p_value < 0.001:
-                    reg_text += ', $p < 0.001$'
-                else:
-                    reg_text += f', $p = {p_value:.3f}$'
-                
-                ax_scatter.text(0.02, 0.05, reg_text, transform=ax_scatter.transAxes,
-                               fontsize=self.config['font_size']-1,
-                               verticalalignment='bottom',
-                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            except:
-                print("⚠️  No se pudo calcular regresión")
+        # ====================================================================
+        # BARRA DE COLOR - POSICIÓN MANUAL
+        # ====================================================================
+        main_pos = ax_main.get_position()
+
+        # Definir posición manual de la barra de color
+        bar_left = main_pos.x1 + 0.005
+        bar_bottom = main_pos.y0
+        bar_width = 0.02
+        bar_height = main_pos.height
+
+        # Crear eje para barra de color
+        cax = fig.add_axes([bar_left, bar_bottom, bar_width, bar_height])
+        cbar = plt.colorbar(scatter, cax=cax, orientation='vertical')
+        cbar.set_label('Point Density', fontsize=14, labelpad=10)
+        cbar.ax.tick_params(labelsize=12)
         
-        # Configurar ejes
-        ax_scatter.set_xlabel(f'Age ({self.config["age_unit"]})', 
-                            fontsize=self.config['font_size'], fontweight='bold')
-        ax_scatter.set_ylabel(f'Metallicity ({self.config["metallicity_unit"]})', 
-                            fontsize=self.config['font_size'], fontweight='bold')
+        # ====================================================================
+        # HISTOGRAMA DE EDAD
+        # ====================================================================
+        ax_hist_age = fig.add_subplot(gs[0, 0], sharex=ax_main)
+        plt.setp(ax_hist_age.get_xticklabels(), visible=False)
         
-        # Grid
-        ax_scatter.grid(True, alpha=0.2, linestyle='--')
+        ax_hist_age.hist(age, bins=20, 
+                        color='skyblue', 
+                        alpha=0.7,
+                        edgecolor='navy',
+                        linewidth=0.8,
+                        density=True)
         
-        # Leyenda
-        handles, labels = ax_scatter.get_legend_handles_labels()
-        if handles:
-            ax_scatter.legend(handles, labels, loc='best', 
-                            framealpha=0.9, fancybox=True,
-                            fontsize=self.config['font_size']-1)
+        ax_hist_age.set_ylabel('Density', fontsize=14)
+        ax_hist_age.grid(True, alpha=0.2, linestyle='--')
         
-        # Estadísticas
-        stats_text = f'$N = {len(age):,}$\n'
-        stats_text += f'$\\langle \\mathrm{{Age}} \\rangle = {age.mean():.2f} \\pm {age.std():.2f}$ Gyr\n'
-        stats_text += f'$\\langle \\mathrm{{[Fe/H]}} \\rangle = {metallicity.mean():.2f} \\pm {metallicity.std():.2f}$'
+        # ====================================================================
+        # HISTOGRAMA DE METALICIDAD
+        # ====================================================================
+        ax_hist_metal = fig.add_subplot(gs[1, 2], sharey=ax_main)
+        plt.setp(ax_hist_metal.get_yticklabels(), visible=False)
         
-        ax_scatter.text(0.98, 0.98, stats_text, transform=ax_scatter.transAxes,
-                       fontsize=self.config['font_size']-1,
-                       verticalalignment='top', horizontalalignment='right',
-                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        ax_hist_metal.hist(metallicity, bins=20,
+                          orientation='horizontal',
+                          color='lightcoral',
+                          alpha=0.7,
+                          edgecolor='darkred',
+                          linewidth=0.8,
+                          density=True)
         
-        # Título informativo
-        if 'bayes' in age_col and 'bayes' in metal_col:
-            title = 'NGC 5128 Globular Clusters: Age vs Metallicity (Bayesian Values)'
-        else:
-            title = 'NGC 5128 Globular Clusters: Age vs Metallicity'
+        ax_hist_metal.set_xlabel('Density', fontsize=14)
+        ax_hist_metal.grid(True, alpha=0.2, linestyle='--')
         
-        ax_scatter.set_title(title, fontsize=self.config['font_size']+1, 
-                           fontweight='bold', pad=15)
+        # ====================================================================
+        # CELDA VACÍA
+        # ====================================================================
+        ax_unused = fig.add_subplot(gs[0, 2])
+        ax_unused.axis('off')
         
-        # Añadir nota sobre método
-        method_note = f'CIGALE Bayesian estimates\n' \
-                     f'Age: {age_col}\n' \
-                     f'Metallicity: {metal_col}'
+        # ====================================================================
+        # TEXTO SIMPLIFICADO EN UNA SOLA CAJA
+        # ====================================================================
+        # Crear texto unificado SIN LaTeX
+        experiment_name = self.get_experiment_display_name()
         
-        ax_scatter.text(0.02, 0.98, method_note, transform=ax_scatter.transAxes,
-                       fontsize=self.config['font_size']-2,
-                       verticalalignment='top',
-                       style='italic',
-                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.3))
-        
-        # Guardar
-        if filename is None:
-            filename = f"age_metallicity_corrected_{self.style}.pdf"
-        
-        output_path = self.output_dir / filename
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=600, bbox_inches='tight')
-        print(f"✅ Gráfico CORREGIDO guardado en: {output_path}")
-        
-        plt.show()
-        return fig, ax_scatter
-    
-    def analyze_distribution(self):
-        """Analiza la distribución de valores para verificar continuidad."""
-        
-        age_col, metal_col = self.get_correct_columns()
-        
-        print(f"\n🔍 ANÁLISIS DE DISTRIBUCIÓN DE VALORES:")
-        print(f"="*50)
-        
-        age = self.data[age_col].dropna()
-        metallicity = self.data[metal_col].dropna()
-        
-        print(f"\n📊 EDAD ({age_col}):")
-        print(f"   • N valores: {len(age)}")
-        print(f"   • Rango: [{age.min():.1f}, {age.max():.1f}]")
-        print(f"   • Valores únicos: {len(age.unique())}")
-        print(f"   • % valores únicos: {len(age.unique())/len(age)*100:.1f}%")
-        
-        if len(age.unique())/len(age) < 0.1:
-            print(f"   ⚠️  VALORES DISCRETOS (probablemente del grid)")
-        else:
-            print(f"   ✅ VALORES CONTINUOS (bayesianos correctos)")
-        
-        print(f"\n📊 METALICIDAD ({metal_col}):")
-        print(f"   • N valores: {len(metallicity)}")
-        print(f"   • Rango: [{metallicity.min():.5f}, {metallicity.max():.5f}]")
-        print(f"   • Valores únicos: {len(metallicity.unique())}")
-        print(f"   • % valores únicos: {len(metallicity.unique())/len(metallicity)*100:.1f}%")
-        
-        if len(metallicity.unique())/len(metallicity) < 0.1:
-            print(f"   ⚠️  VALORES DISCRETOS (probablemente del grid)")
-            print(f"   ⚠️  Debes usar bayes.stellar.metallicity, no best.stellar.metallicity")
-        else:
-            print(f"   ✅ VALORES CONTINUOS (bayesianos correctos)")
-        
-        # Mostrar valores más comunes si son discretos
-        if len(metallicity.unique()) < 10:
-            print(f"\n📋 VALORES DISCRETOS ENCONTRADOS:")
-            for val in sorted(metallicity.unique()):
-                count = (metallicity == val).sum()
-                pct = count / len(metallicity) * 100
-                print(f"   • {val:.5f}: {count} objetos ({pct:.1f}%)")
-    
-    def compare_bayes_vs_best(self):
-        """Compara valores bayesianos vs 'best'."""
-        
-        print(f"\n🔍 COMPARANDO VALORES BAYESIANOS vs 'BEST':")
-        print(f"="*60)
-        
-        # Verificar qué columnas existen
-        cols_to_check = [
-            ('bayes.stellar.age_m_star', 'best.sfh.age_main'),
-            ('bayes.stellar.metallicity', 'best.stellar.metallicity')
+        # Texto simple: experimento y estadísticas
+        text_lines = [
+            f'{experiment_name}',
+            f'',
+            f'$N = {len(age):,}$',
+            f'$\\langle Age \\rangle = {age.mean():.2f} \\pm {age.std():.2f}$ Gyr',
+            f'$\\langle [Fe/H] \\rangle = {metallicity.mean():.3f} \\pm {metallicity.std():.3f}$'
         ]
         
-        for bayes_col, best_col in cols_to_check:
-            if bayes_col in self.data.columns and best_col in self.data.columns:
-                bayes_vals = self.data[bayes_col].dropna()
-                best_vals = self.data[best_col].dropna()
-                
-                print(f"\n📊 {bayes_col} vs {best_col}:")
-                print(f"   • Bayesianos únicos: {len(bayes_vals.unique())}")
-                print(f"   • 'Best' únicos: {len(best_vals.unique())}")
-                print(f"   • Diferencia media: {(bayes_vals - best_vals).mean():.4f}")
-                
-                # Crear gráfico de comparación
-                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-                
-                # Histograma comparativo
-                ax1.hist(bayes_vals, bins=30, alpha=0.5, label='Bayesian', density=True)
-                ax1.hist(best_vals, bins=30, alpha=0.5, label='Best', density=True)
-                ax1.set_xlabel('Value')
-                ax1.set_ylabel('Density')
-                ax1.set_title(f'Distribution: {bayes_col.split(".")[-1]}')
-                ax1.legend()
-                ax1.grid(True, alpha=0.3)
-                
-                # Scatter plot
-                ax2.scatter(best_vals, bayes_vals, alpha=0.6, s=20)
-                ax2.plot([best_vals.min(), best_vals.max()], 
-                        [best_vals.min(), best_vals.max()], 
-                        'r--', alpha=0.5, label='y=x')
-                ax2.set_xlabel('Best value')
-                ax2.set_ylabel('Bayesian value')
-                ax2.set_title('Best vs Bayesian')
-                ax2.legend()
-                ax2.grid(True, alpha=0.3)
-                
-                plt.tight_layout()
-                plt.savefig(self.output_dir / f"comparison_{bayes_col.split('.')[-1]}.png", 
-                          dpi=300, bbox_inches='tight')
-                plt.show()
+        combined_text = '\n'.join(text_lines)
+        
+        # Posición en coordenadas de ejes (abajo derecha)
+        # Usamos transform=ax_main.transAxes para coordenadas relativas (0-1)
+        ax_main.text(0.98, 0.05, combined_text,
+                    transform=ax_main.transAxes,
+                    fontsize=11,
+                    verticalalignment='bottom',
+                    horizontalalignment='right',
+                    bbox=dict(boxstyle='round,pad=0.5',
+                             facecolor='white',
+                             alpha=0.95,
+                             edgecolor='black',
+                             linewidth=1),
+                    zorder=10)
+        
+        # Texto "Solar" al lado de la línea
+        # Usamos coordenadas de datos para la posición vertical
+        solar_x = age.max() - 0.03 * (age.max() - age.min())
+        ax_main.text(solar_x, 0.02, 'Solar',
+                    color=self.config['solar_color'],
+                    fontsize=9,
+                    fontweight='bold',
+                    verticalalignment='bottom',
+                    horizontalalignment='right',
+                    bbox=dict(boxstyle='round,pad=0.2',
+                             facecolor='white',
+                             alpha=0.9,
+                             edgecolor=self.config['solar_color'],
+                             linewidth=0.5),
+                    zorder=10)
+        
+        # ====================================================================
+        # CONFIGURACIÓN FINAL
+        # ====================================================================
+        # Ejes
+        ax_main.set_xlabel(f'Age ({self.config["age_unit"]})', 
+                          fontsize=14, fontweight='bold', labelpad=8)
+        ax_main.set_ylabel(f'Metallicity ({self.config["metallicity_unit"]})', 
+                          fontsize=14, fontweight='bold', labelpad=8)
+        
+        # Tamaño de los números de los ejes
+        ax_main.tick_params(axis='both', labelsize=12)
+        ax_hist_age.tick_params(axis='y', labelsize=12)
+        ax_hist_metal.tick_params(axis='x', labelsize=12)
     
-    def generate_methods_description(self):
-        """Genera descripción de métodos para el paper."""
+        # Grid
+        ax_main.grid(True, alpha=0.2, linestyle='--', zorder=1)
         
-        age_col, metal_col = self.get_correct_columns()
+        # Ajustar límites
+        age_margin = 0.05 * (age.max() - age.min())
+        metal_margin = 0.05 * (metallicity.max() - metallicity.min())
         
-        methods = f"""
-METHODS DESCRIPTION FOR PAPER
-=============================
-
-Data Analysis:
-- We used Bayesian estimates from CIGALE SED fitting code
-- Ages: {age_col}
-- Metallicities: {metal_col}
-- Conversion: Z → [Fe/H] using Z_⊙ = {self.config['sun_metallicity']}
-
-Rationale for using Bayesian values:
-- Bayesian estimates provide continuous values by marginalizing over the model grid
-- Avoids discretization artifacts from the finite grid of models
-- More robust for statistical analysis than discrete 'best' values
-
-Statistical Analysis:
-- Pearson correlation coefficient
-- Linear regression with confidence intervals
-- Kernel Density Estimation for visualization
-- All analyses performed with custom Python scripts
-
-Note on metallicity:
-- Values were converted from mass fraction Z to [Fe/H] scale
-- Solar reference: Z_⊙ = {self.config['sun_metallicity']} (Asplund et al. 2009)
-"""
+        ax_main.set_xlim(age.min() - age_margin, age.max() + age_margin)
+        ax_main.set_ylim(metallicity.min() - metal_margin, 
+                        metallicity.max() + metal_margin)
         
-        methods_file = self.output_dir / "methods_description.txt"
-        with open(methods_file, 'w') as f:
-            f.write(methods)
+        # ====================================================================
+        # GUARDAR
+        # ====================================================================
+        experiment_part = self.get_experiment_filename_part()
+        filename = f"age_metallicity_{experiment_part}.pdf"
+        output_path = self.output_dir / filename
         
-        print(f"✅ Descripción de métodos guardada: {methods_file}")
-        return methods
+        plt.savefig(output_path, dpi=600, bbox_inches='tight')
+        print(f"\n✅ GRÁFICO GUARDADO EN: {output_path}")
+        
+        # Versión PNG para revisión
+        png_path = self.output_dir / f"age_metallicity_{experiment_part}.png"
+        plt.savefig(png_path, dpi=300, bbox_inches='tight')
+        print(f"✅ Versión PNG: {png_path}")
+        
+        #plt.show()
+        
+        return fig, ax_main
 
 # ============================================================================
 # EJECUCIÓN PRINCIPAL
 # ============================================================================
 
 def main():
-    """Función principal corregida."""
+    """Función principal."""
     
-    print("\n" + "="*70)
-    print("📊 PAPER-QUALITY PLOTTER CORREGIDO (Valores Bayesianos)")
-    print("="*70)
+    print("\n" + "="*60)
+    print("📊 AGE-METALLICITY PLOTTER - VERSIÓN SIMPLIFICADA")
+    print("="*60)
     
-    parser = argparse.ArgumentParser(description='Create plots with CORRECT Bayesian values')
+    parser = argparse.ArgumentParser(description='Create age-metallicity plots with experiment info')
     parser.add_argument('input_file', help='FITS file from CIGALE')
-    parser.add_argument('--output-dir', default='paper_plots_corrected', 
+    parser.add_argument('--experiment', default='narrow',
+                       choices=['narrow', 'narrow+broad', 'splus_only', 'splus_decam'],
+                       help='Type of experiment/filter combination')
+    parser.add_argument('--output-dir', default='paper_plots_final', 
                        help='Output directory')
-    parser.add_argument('--analyze', action='store_true',
-                       help='Analyze value distributions')
-    parser.add_argument('--compare', action='store_true',
-                       help='Compare Bayesian vs Best values')
-    parser.add_argument('--methods', action='store_true',
-                       help='Generate methods description')
     
     args = parser.parse_args()
     
     try:
-        # Crear plotter
-        plotter = AgeMetallicityPlotter(args.input_file, args.output_dir)
+        plotter = AgeMetallicityPlotter(args.input_file, args.experiment, args.output_dir)
         
-        # Análisis de distribución
-        if args.analyze:
-            plotter.analyze_distribution()
+        print("\n🎨 CREANDO GRÁFICO FINAL...")
+        plotter.create_final_plot()
         
-        # Comparación bayes vs best
-        if args.compare:
-            plotter.compare_bayes_vs_best()
-        
-        # Generar descripción de métodos
-        if args.methods:
-            plotter.generate_methods_description()
-        
-        # Crear gráfico principal
-        print(f"\n🎨 CREANDO GRÁFICO PRINCIPAL CON VALORES CORRECTOS...")
-        plotter.plot_correct_scatter(
-            show_histograms=True,
-            show_regression=True,
-            filename="Fig1_age_metallicity_corrected.pdf"
-        )
-        
-        print(f"\n✅ ANÁLISIS CORREGIDO COMPLETADO!")
+        print(f"\n✅ PROCESO COMPLETADO!")
         print(f"📁 Resultados en: {args.output_dir}")
+        
+        # Mostrar nombres de archivo generados
+        experiment_part = plotter.get_experiment_filename_part()
+        print(f"📄 Archivos generados:")
+        print(f"   • age_metallicity_{experiment_part}.pdf")
+        print(f"   • age_metallicity_{experiment_part}.png")
         
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
