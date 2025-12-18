@@ -60,5 +60,5 @@ sed_modules = ,
 # savefluxes.
 analysis_method = 
 
-# Number of CPU cores available. This computer has 12 cores.
+# Number of CPU cores available. This computer has 48 cores.
 cores = 

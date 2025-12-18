@@ -1,0 +1,35 @@
+
+SELECTION OF HIGH-QUALITY GLOBULAR CLUSTER CANDIDATES
+
+From the initial catalog of 2717 unique GC candidates around NGC 5128 
+with probability P ≥ 0.7, we applied additional photometric quality criteria to 
+select sources suitable for spectral energy distribution (SED) fitting with CIGALE.
+
+Our selection process consisted of:
+
+1. Spatial uniqueness: We removed duplicate entries based on celestial coordinates 
+   (RA, DEC), retaining only unique sources.
+
+2. Probability threshold: We selected sources with probability of being GCs P ≥ 0.7, 
+   based on previous classification efforts.
+
+3. Photometric quality control: We applied filter-specific photometric quality criteria:
+
+   • We required sources to have at least 3 of the 7 
+     S-PLUS narrow-band filters meeting quality thresholds.
+
+   • Filter-specific error thresholds: 0.8 mag for F378, 
+     0.7 mag for F395, 0.5 mag for F410, 
+     0.5 mag for F430, 0.4 mag for F515,
+     0.3 mag for F660, and 0.4 mag for F861.
+
+   • Signal-to-noise ratios were required to be ≥2-5 depending on the filter.
+
+The final high-quality sample consists of 1394 GC candidates, representing 
+51.3% of the initial probability-selected sample. These objects have 
+median photometric errors ranging from 0.543 mag in F378 to 
+0.111 mag in F660, and a median GC probability of 1.00. 
+
+This sample provides robust statistical power for our comparative analysis of 
+S-PLUS-only versus S-PLUS+DECam photometric fitting while ensuring high data quality 
+for reliable SED fitting results.

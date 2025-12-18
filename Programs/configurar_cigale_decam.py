@@ -153,7 +153,7 @@ additionalerror = 0.1
     # Age [Myr] of the separation between the young and the old star
     # populations. The default value in 10^7 years (10 Myr). Set to 0 not to
     # differentiate ages (only an old population).
-    separation_age = 10
+    separation_age = 1
   
   [[redshifting]]
     # Redshift of the objects. Leave empty to use the redshifts from the

@@ -31,7 +31,7 @@ parameters_file =
 redshift = from_file
 sed_modules = sfhdelayed, xsl, redshifting
 analysis_method = pdf_analysis
-cores = 4
+cores = 12
 
 # 7 filtros S-PLUS con sus errores
 bands = F0378, F0378_err, F0395, F0395_err, F0410, F0410_err, F0430, F0430_err, F0515, F0515_err, F0660, F0660_err, F0861, F0861_err
@@ -63,7 +63,7 @@ additionalerror = 0.1
     # Metalicidad (Z) - 5 valores
     metallicity = 0.0004, 0.004, 0.008, 0.02, 0.03
     
-    separation_age = 10
+    separation_age = 1
   
   [[redshifting]]
     redshift = 
@@ -79,7 +79,7 @@ additionalerror = 0.1
   save_chi2 = none
   lim_flag = noscaling
   mock_flag = False
-  redshift_decimals = 6
+  redshift_decimals = -1
   blocks = 1
 """
     
