@@ -28,6 +28,10 @@ __pycache__/
 # Ignorar checkpoints de Jupyter
 *.ipynb_checkpoints
 
+# Ignorar algunos png and pdf
+*_best_model.pdf
+*_best_model.png
+
 # Ignorar carpetas de salida o resultados
 output/
 results/
