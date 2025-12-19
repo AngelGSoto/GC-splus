@@ -31,6 +31,7 @@ __pycache__/
 # Ignorar algunos png and pdf
 *_best_model.pdf
 *_best_model.png
+*best_model.pdf
 
 # Ignorar carpetas de salida o resultados
 output/
