@@ -28,9 +28,9 @@ __pycache__/
 # Ignorar checkpoints de Jupyter
 *.ipynb_checkpoints
 
-# Ignorar algunos png and pdf
-*_best_model.pdf
-*_best_model.png
+# Ignorar archivos _best_model en el directorio out/
+anac_data/CIGALE-extinction/out/*_best_model.pdf
+anac_data/CIGALE-extinction/out/*_best_model.png
 *best_model.pdf
 
 # Ignorar carpetas de salida o resultados
