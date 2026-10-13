@@ -174,7 +174,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--reference-mag",
         help="Magnitude column used to bin the parent sample, e.g. rmag; requires --reference",
     )
-    parser.add_argument("--id-col", default="auto", help="ID column, or 'auto' (default: auto)")
+    parser.add_argument(
+        "--id-col",
+        help="Set both ID columns to this name; use the individual options if they differ",
+    )
+    parser.add_argument(
+        "--photometry-id-col",
+        default="auto",
+        help="Photometry ID column, or 'auto' (default: auto)",
+    )
+    parser.add_argument(
+        "--reference-id-col",
+        default="auto",
+        help="Parent-catalog ID column, or 'auto' (default: auto)",
+    )
     parser.add_argument("--field-col", default="FIELD", help="Field column (default: FIELD)")
     parser.add_argument(
         "--format",
@@ -216,7 +229,9 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("--reference-mag requires --reference")
 
     phot_headers, phot_rows = read_csv(args.photometry)
-    id_col = choose_id_column(phot_headers, args.id_col)
+    phot_id_col = choose_id_column(
+        phot_headers, args.id_col or args.photometry_id_col
+    )
     if args.format == "auto":
         long_format = {"filter", "mag"}.issubset(phot_headers)
     else:
@@ -229,7 +244,7 @@ def run(args: argparse.Namespace) -> None:
         if missing:
             raise ValueError(f"Long-format catalog missing columns: {', '.join(sorted(missing))}")
         for line_number, row in enumerate(phot_rows, start=2):
-            key = (row.get(id_col) or "").strip()
+            key = (row.get(phot_id_col) or "").strip()
             filter_name = (row.get("filter") or "").strip().upper()
             if not key or not filter_name:
                 raise ValueError(f"Photometry: blank ID or filter on CSV line {line_number}")
@@ -245,20 +260,21 @@ def run(args: argparse.Namespace) -> None:
             )
         phot_by_id = {
             key: {"row": row, "measurements": {}}
-            for key, row in rows_by_id(phot_rows, id_col, "Photometry").items()
+            for key, row in rows_by_id(phot_rows, phot_id_col, "Photometry").items()
         }
 
     reference_rows = None
     reference_headers = []
     if args.reference:
         reference_headers, rows = read_csv(args.reference)
-        reference_id_col = choose_id_column(reference_headers, args.id_col)
+        reference_id_col = choose_id_column(
+            reference_headers, args.id_col or args.reference_id_col
+        )
         if args.reference_mag and args.reference_mag not in reference_headers:
             raise ValueError(
                 f"Reference magnitude column {args.reference_mag!r} is absent from {args.reference}"
             )
         reference_rows = rows_by_id(rows, reference_id_col, "Reference catalog")
-        id_col = reference_id_col
     elif args.reference_mag:
         raise ValueError("--reference-mag requires --reference")
 
@@ -268,16 +284,18 @@ def run(args: argparse.Namespace) -> None:
         sample = {key: source["row"] for key, source in phot_by_id.items()}
 
     field_col = args.field_col
-    fields = sorted(
-        {
+    def sample_field(key: str, row: dict) -> str:
+        if reference_rows is not None:
+            if field_col not in reference_headers:
+                return "ALL"
+            return (row.get(field_col) or "").strip() or "UNKNOWN"
+        return (
             (row.get(field_col) or "").strip()
-            or (
-                (phot_by_id.get(key, {}).get("row", {}).get(field_col) or "").strip()
-            )
+            or (phot_by_id.get(key, {}).get("row", {}).get(field_col) or "").strip()
             or "ALL"
-            for key, row in sample.items()
-        }
-    )
+        )
+
+    fields = sorted({sample_field(key, row) for key, row in sample.items()})
     summary_rows = []
     completeness_rows = []
     depth_rows = []
@@ -285,12 +303,7 @@ def run(args: argparse.Namespace) -> None:
     for field in fields:
         sample_items = []
         for key, row in sample.items():
-            row_field = (
-                (row.get(field_col) or "").strip()
-                or (phot_by_id.get(key, {}).get("row", {}).get(field_col) or "").strip()
-                or "ALL"
-            )
-            if row_field == field:
+            if sample_field(key, row) == field:
                 sample_items.append((key, row, phot_by_id.get(key)))
 
         for filter_name in args.filters:
@@ -299,7 +312,6 @@ def run(args: argparse.Namespace) -> None:
                 mag_col = f"MAG_{filter_name}_{args.aperture}"
                 if mag_col not in phot_headers:
                     raise ValueError(f"Photometry column {mag_col!r} is missing")
-            per_source = []
             snr_by_mag_bin = defaultdict(list)
             error_by_mag_bin = defaultdict(list)
             completeness_by_bin = defaultdict(lambda: {"n": 0, "detected": 0, "usable": 0})
@@ -330,7 +342,6 @@ def run(args: argparse.Namespace) -> None:
 
                 if magnitude is not None:
                     mag_bin = magnitude_bin(magnitude, args.bin_width)
-                    per_source.append((magnitude, error, snr, usable))
                     if snr is not None:
                         snr_by_mag_bin[mag_bin].append(snr)
                     if error is not None:
