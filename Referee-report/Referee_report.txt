@@ -1,0 +1,95 @@
+Article reference: aa62907-26
+Title: The multiple phases of the build-up of the GC system of NGC 5128 out to ∼32 R_e. Ages and metallicities from 12-band SED fitting
+Author(s): L. A. Gutiérrez-Soto, J. P. Caso, A. L. Chies-Santos, R. Salinas, A. Monachesi, P. Floriano, P. dos Santos-Lopes, M. T. Moura, Paula Coelho, C. J. Bonatto, G. B. Oliveira Schwarz, E. Telles, L. F. Lomelí-Núñez, M. Grossi, N. M. Cardoso, P. K. Humire
+
+Dear Dr. Gutiérrez Soto,
+
+Your paper was submitted to a referee who recommends publication after substantial revisions (see the enclosed report).
+Please make the requested revisions and send us the revised version at your earliest convenience via http://nestor.aanda.org/aa/user/article/aa62907-26.
+
+In your cover letter, please list all the changes made (including new or removed coauthors), and mark the changes in your manuscript using boldface or colored text. However, please note that your source files should only include the "clean" revised version.  A separate pdf with the marked changes (bold or diff file) should be uploaded as an "optional file."
+
+Your revised version should be submitted within three months. Should the revisions require more time, please contact the editorial office to request an extension.
+
+Yours sincerely,
+
+Francoise Combes
+ A&A Associate Editor
+
+=================
+Referee report(s) on this version:
+
+
+Report by referee 1:
+
+This paper is a study of the metallicity of the globular clusters (GCs) in NGC5128 out to unprecedented galactocentric distances. This measurement relies on the combination of broad-band photometry from the literature with new narrow-band observations that allow to better constrain the metallicity in the spectral energy distribution (SED) fitting. The main result of this study is the identification of a metal rich and metal poor population of GCs, both showing radial metallicity gradients, plus an intermediate population with flat gradient. This is interpreted as likely originating from accretion.
+
+This study contains interesting results from novel data that offer valuable additional constraints to accretion history of this galaxy. However the manuscript would benefit from some restructuring, as well as from a more in-depth analysis of the data, and a more rigorous treatment and quantification of the uncertainties. Therefore I recommend this paper for publication after major revisions.
+———————————————————————————————————————-
+
+Major comments *
+
+The text needs some restructuring. In principle I appreciate the intention to move part of the details of the analysis to the appendix and leave the main text lighter and more focused on the results, but in a few instances I found that this was not a good idea. This is because i) some parts relegated to the appendix were crucial to understand the analysis - bouncing back and forth between main text and appendix made the reading much harder than necessary - and because ii) leaving out from the main text important details on the choices made or the tests done detracts from the actual work that has been done. I’ll try to advise below on some adjustments.
+Since the accuracy of the measurement of the metallicities relies on the narrow band filters, an important information would be the depth reached by the new narrow-band photometry and how this affects the completeness of the final sample of GCs. Line 162 states that there are GCs that might not be detected in some images. This translates in less accurate measurements for some objects or even quality cuts later on in the analysis that likely bias the final sample towards the brighter population. This should be quantified and discussed.
+Metallicities from SED fitting are inherently uncertain and model dependent. This aspect is not really addressed in the paper but it does deserve some attention. I would encourage, for example, some exploration of how variable are the results when changing the ingredients in the modelling. There is some mention in the appendix (lines from 1143) of some tests with the BC03 libraries, but there is no mention of whether these new metallicities are still consistent within the uncertainties or whether the gradients persist. I would also try different star formation histories, for example a bursty SFH. All this should be in the main text. Then a clear statement on the magnitude of the uncertainties and how they are derived is important. Is the comparison with spectroscopy similarly satisfying with different modelling choices? Are the metallicity gradients robust against the details of the modelling?
+I found the test mentioned in Sect 4.1.2 and then described in the appendix F unconvincing. There the results from the SED fitting w/ and w/o narrow-band photometry are compared with metallicity from spectroscopy. Since the comparison is somewhat worse with broad-band photometry only, the conclusion is that narrow-bands help in constraining better the metallicity. The main issue with this is that the broad-band only test is carried on a much larger sample of 123 GCs vs 94 from the comparison before, and it is not even clear how much overlap there is between the two samples. If the point of the test is just to show that the metallicity posterior distribution from the SED fitting is much narrower and better constrained with the use of narrow-band filters, then why not show exactly that? In the comparison, only the same objects should be used.
+The quantification of the metallicity gradients needs to take into account for the uncertainties on the metallicities. Is the fitting method weighting by the uncertainties? To test the robustness of the errors on the slope, I suggest to use some statistical test based on resampling - for example a bootstrap with replacement or a jackknife. The distribution on the fitted slope would determine the robustness of the fitted parameter.
+Section 4.3 describes one of the more important steps of the analysis, that is the definition of the GC subpopulations. After a lengthy description of the method and of the parameters, the method is finally applied to the data and results in 4 “reliable” components. But then the application of the method on a *different* sample (the old GCs) returns 3 components and this somehow motivates 3 components for the whole sample. The actual statistical tests that have been made and that quantify the robustness of the different components is barely mentioned in the main text and is completely hidden in the appendix. I would clearly state the tests done in the main text and their conclusions. Only after this comes the comparison with the old population and the possible interpretation of the different metallicity distributions. A final plot like figure H1 and H2 needs to be shown in the main text for the final definition of the three components along with the corresponding numbers. The conclusions of this paper hinge on this step and cannot be buried in the appendix.
+Something I would try to explore is whether the distribution of metallicities changes with radius. If the number of GCs allows it, I suggest to divide the sample in two, or even three radial bins, and see how the distributions evolve. Are three subpopulation visible at all radii? Are the gradients traced by a shift in the mean metallicities of the MP and MR populations or are the distributions different?
+The comparison with TNG50 is unsatisfactory. An analog of NGC5128 is found based on integrated properties and merger history. By observing that i) the simulated red GC population extends in the outer halo of the host as the MR population of NGC5128 and that ii) both galaxy had mergers, the conclusion is that mergers are responsible for this property. This is not demonstrated in this comparison and, while “”such a configuration is naturally expected in systems that have experienced a complex merger history” (line 1260), at this point there should be at least some references of work in the literature that actually checked this. The point of using simulations would be either i) to trace the simulated galaxy back in time and actually study how the merger redistributes the GCs with radius or ii) take a sample of galaxies with and without important mergers and compare their distribution of GCs. This is probably beyond the scope of the paper but could be the starting point for a follow up publication. As it is, I suggest to remove this part.
+The intermediate-age GCs are interpreted as formed in the satellite that merged with NGC5128. Are the ages consistent with those of the intermediate-age halo stars? If these GCs actually formed in the satellite as triggered by the merger, as suggested in Sect. 5.1, are these ages consistent with the epoch of the merger that created the dust lane, or is this something else?
+The intermediate metallicity, old population is also interpreted to be accreted based on the flat metallicity gradient. I am wondering about the interpretation of this component. Is this potentially coming from the same satellite that merged with Cen A together with the intermediate-age population? A comparison with the mass-metallicity relation should return a potential mass for the accreted satellite, perhaps this can be useful to put this component into context.
+I have the impression that after a lot of work to obtain metallicities and separate populations, the paper does not fully capitalise on the results. In my opinion the next step would be to study the spatial distribution of the three population: are the density profiles systematically different? If the intermediate metallicity population is actually accreted, I would expect a more shallow distribution with radius compared to the MR. This would strengthen the conclusions derived from the metallicity gradients.  It would also be interesting to see if the different populations are somewhat clustered in space, e.g. azimuthally segregated, or smoothly distributed. You could try to show 2D maps for the three metallicity components. There is a section 5.3 that connects the intermediate population with the streams, but the whole analysis is hidden in appendix M. Please consider moving this interesting part to the main text. Table M1 is also very interesting. Perhaps it would be useful to compare the properties of the GCs in the streams with those of the GC in the relaxed halo.
+
+———————————————————————————————————————-
+
+Minor comments *
+
+Introduction
+Line 10: Es -> please define
+Line 41: “are poorer” -> metal poorer? Less numerous? Please clarify
+Line 44: “through its evolution” -> their
+Line 52: please quote stellar mass for context and introduce NGC5128 (also know as Cen A)
+
+Sect 2 + App A
+Fig. A1 “features of the narrow-band S-PLUS filter system, as well as the broad-band” -> the broad band is missing, though it would be good to have them too.
+
+It would be helpful to have a small paragraph describing the catalogs from Taylor+2017 (T17) at the end of section 2.1.
+
+Another information that I am missing is on the coverage and depth of the new observations. It would be useful to have and image similar to Fig.1 in T17 showing the pointings vs the position of the GCs of the catalog. This would help understand better Fig.4 where, at least by eye, the position of the GCs looks much more inhomogeneous than Fig.11 in T17. The ultimate question is whether the new observations are also spatially complete.
+
+To derive zero points “We selected ~100 reference stars in each field”. Then it’s unclear whether the final zero point is an average of the 100? Then Fig.A1 should contain also a comparison between the synthetic (i.e. the convolve spectrum) and instrumental magnitudes (from the zero points derived from 100 stars?).
+
+Fig. 2 and the discrepancy between spectrum and photometry between 7000 and 9000 AA. While it is true that narrow telluric features are diluted in the photometry, a convolution of the spectrum with the band-pass of the filter should still return values consistent with the photometry. Could you show this comparison too?
+
+Sect 3  “Our more conservative threshold therefore ensures negligible contamination from Galactic stars” -> How is this ascertained? P(GC)>70 means P(contamination)<30.
+Line 257: iterative process not explained
+
+Sect 4 Line 296 Cent A
+
+Fig 3 label chi^2 reducido
+
+Figure 4 is unhelpful. The crowding of points prevents to see any of the properties described at the beginning of sect. 4.2. Perhaps smaller datapoints, or a splitting in different panels each showing, for example, different metallicity populations would better showcase the GCS distribution.
+
+Fig. 6 and G1: it is interesting to see the strong correlation between metallicity and broad-band colours and then the cloud of younger GCs. I suggest to add some transparency to the datapoints in figure 6 to allow to see better the distribution of orange points. It would be great to show the role of the narrow-band filters in mitigate the age-metallicity degeneracy here. For example, is there some narrow band color that allows to distinguish between young and old GCs with the same (g-z) color?
+
+Line 451 several -> severe
+
+Line 671 conclussions
+
+
+
+=================
+
+Before resubmitting your manuscript, please take the time to verify the following common language and formatting issues.
+
+1) Please note the spelling convention (US or UK) of your paper and run a spell check specific to your preference (see the A&A language guide for authors for common spelling and punctuation differences between these two conventions).
+2) Check that abbreviations and acronyms are introduced correctly.
+3) Check your reference format, see https://www.aanda.org/for-authors/latex-issues/references
+
+
+
+The A&A language guide for authors is available at https://www.aanda.org/for-authors/language-editing/a-a-language-guide-for-authors
+
+
+For general information on publishing with A&A, please see the A&A author’s guide, available at https://www.aanda.org/for-authors/author-information/paper-organization.
