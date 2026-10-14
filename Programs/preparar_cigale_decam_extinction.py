@@ -7,7 +7,23 @@
 
 import pandas as pd
 import numpy as np
-import os
+import argparse
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_INPUT = (
+    PROJECT_ROOT
+    / "anac_data"
+    / "Results_Corrected"
+    / "all_fields_photometry_OPTIMIZED_1394objects.csv"
+)
+DEFAULT_OUTPUT = (
+    PROJECT_ROOT
+    / "anac_data"
+    / "CIGALE-DEcam-extinction"
+    / "gc_splus_cigale_fixed.txt"
+)
 
 def abmag_to_mjy(mag_ab):
     """Convierte magnitud AB a flujo en mJy"""
@@ -15,7 +31,7 @@ def abmag_to_mjy(mag_ab):
         return 0.0
     return 3631.0 * 10**(-mag_ab / 2.5) * 1000
 
-def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_custom.txt", n_objects=None):
+def preparar_datos_redshift_primero(input_file, output_file=DEFAULT_OUTPUT, n_objects=None):
     """
     Crea archivo para CIGALE con 'redshift' como primera columna.
     INCLUYE 12 FILTROS: 7 S-PLUS (estrechos) + 5 DECam (anchos)
@@ -28,7 +44,9 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
     print("⚠️  PARA USAR CON: redshift = from_file en pcigale.ini")
     print("=" * 78)
     
-    if not os.path.exists(input_file):
+    input_file = Path(input_file)
+    output_file = Path(output_file)
+    if not input_file.exists():
         print(f"❌ ERROR: {input_file} no encontrado")
         return False
     
@@ -39,7 +57,9 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
         print(f"❌ Error leyendo {input_file}: {e}")
         return False
     
-    if n_objects and n_objects < len(df):
+    if n_objects is not None and n_objects < len(df):
+        if n_objects <= 0:
+            raise ValueError("n_objects debe ser un entero positivo o None")
         df = df.head(n_objects).copy()
         print(f"🔬 Usando muestra: {len(df)} objetos")
     
@@ -150,7 +170,8 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
         header_list.append(f'{cigale_name}_err')
     
     # Escribir archivo
-    with open(output_file, 'w') as f:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with output_file.open('w', encoding='utf-8') as f:
         f.write('# ' + ' '.join(header_list) + '\n')
         for row in data_rows:
             # Formatear valores
@@ -177,20 +198,21 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
     print(f"   • ✨ Usando magnitudes CORREGIDAS por extinción")
     
     # Estadísticas de detección
-    print(f"\n🔍 ESTADÍSTICAS DE DETECCIÓN (primeros {min(10, len(data_rows))} objetos):")
+    n_reported = min(10, len(data_rows))
+    print(f"\n🔍 ESTADÍSTICAS DE DETECCIÓN (primeros {n_reported} objetos):")
     for i, band in enumerate(splus_filter_map.values()):
-        fluxes = [data_rows[j][2 + 2*i] for j in range(min(10, len(data_rows)))]
+        fluxes = [data_rows[j][2 + 2*i] for j in range(n_reported)]
         detected = sum(1 for f in fluxes if f > 0)
-        print(f"   • {band}: {detected}/10 objetos con flujo > 0")
+        print(f"   • {band}: {detected}/{n_reported} objetos con flujo > 0")
     
     for i, band in enumerate(decam_filter_map.values()):
         offset = 2 + 14  # 2 (redshift+id) + 14 (7 filtros S-PLUS × 2)
-        fluxes = [data_rows[j][offset + 2*i] for j in range(min(10, len(data_rows)))]
+        fluxes = [data_rows[j][offset + 2*i] for j in range(n_reported)]
         detected = sum(1 for f in fluxes if f > 0)
-        print(f"   • {band}: {detected}/10 objetos con flujo > 0")
+        print(f"   • {band}: {detected}/{n_reported} objetos con flujo > 0")
     
     print(f"\n📋 EJEMPLO (primer objeto):")
-    with open(output_file, 'r') as f:
+    with output_file.open('r', encoding='utf-8') as f:
         print(f"  {f.readline().strip()}")
         second_line = f.readline().strip()
         if len(second_line) > 150:
@@ -201,8 +223,28 @@ def preparar_datos_redshift_primero(input_file, output_file="gc_splus_cigale_cus
     return True
 
 if __name__ == "__main__":
-    input_csv = "../Results_Corrected/all_fields_photometry_OPTIMIZED_1394objects.csv"
-    N_OBJECTS_TEST = None  # None para todos, o un número para prueba
+    parser = argparse.ArgumentParser(
+        description="Prepare extinction-corrected S-PLUS + DECam catalog for CIGALE."
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT,
+        help="Corrected catalog (default: anac_data/Results_Corrected/all_fields_photometry_OPTIMIZED_1394objects.csv)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help="CIGALE text output (default: anac_data/CIGALE-DEcam-extinction/gc_splus_cigale_fixed.txt)",
+    )
+    parser.add_argument(
+        "--n-objects",
+        type=int,
+        help="Optional positive number of rows to process for a test run",
+    )
+    args = parser.parse_args()
+    input_csv = args.input
     
     print("=" * 78)
     print("📁 PROCESAMIENTO DE DATOS PARA CIGALE (CON CORRECCIÓN DE EXTINCIÓN)")
@@ -212,14 +254,16 @@ if __name__ == "__main__":
     print(f"✨ Usando magnitudes CORREGIDAS por extinción")
     print("=" * 78)
     
-    success = preparar_datos_redshift_primero(input_csv, n_objects=N_OBJECTS_TEST)
+    success = preparar_datos_redshift_primero(
+        input_csv, output_file=args.output, n_objects=args.n_objects
+    )
     
     if success:
         print("\n" + "=" * 78)
         print("🚀 CONFIGURACIÓN PARA CIGALE (MISMA QUE ANTES):")
         print("=" * 78)
         print("1. En pcigale.ini usar:")
-        print("   data_file = gc_splus_cigale_custom.txt")
+        print("   data_file = gc_splus_cigale_fixed.txt")
         print("   redshift = from_file")
         print("   bands = F0378, F0378_err, ..., F0861, F0861_err,")
         print("           sdss.up, sdss.up_err, ..., sdss.zp, sdss.zp_err")
