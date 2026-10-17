@@ -1,0 +1,69 @@
+I'm commenting on Ana's annotated version, which may be a bit outdated by now, but in that way I avoid commenting on issues already raised.
+
+
+line 39 I would say grow instead of grew, since this is a still continuing proceess.
+
+line 53  les --> less
+
+lines 61 here I'm going to plug my own work. You may want to cite https://ui.adsabs.harvard.edu/abs/2015A%26A...577A..59S/abstract as e.g., after "high-density environments".
+
+line 67 I would add here its receding velocity since this is relevant for the coverage of the medium-band filters in the GCs SEDs
+
+line 78 As I commented before, these are not DES but DECAm, let's not confuse the instrument with the survey.
+
+line 87, I actually wouldn't mention here unsharp masking at all, since it's not defined and it's a rather minor part of the reduction process.
+
+Section 2.1 We may want to provide total expsoure times per each of the medium-band filters somewhere, perhaps in Table 1?
+
+Fig 1. "b) Galaxy background model", do you mean galaxy+backgroud? If it's only the galaxy background, we shouldn't see th galaxy in this figure, right?
+
+Fig 1 I'm not sure about the usefulness of the color bars, what units are those? What is the meaning of negative values for panels a and be. I would understand negative values in a c), but not much in a) and b), but in c) both positive and negative are shown with the same shades of grey. Also, I'm nt sure why the gray scale is inverted for the subtracted images, I would sta consistent throughout the panels, with always, let's say, the stars in dark, and the bacground in light.
+
+Fig 1. How central is the "central region"? At some point we won't see any GCS because of the complex dust features (and possibly stauration) near the very cente of the galaxy)
+
+line 138 how do these apetures compare to the photometry of Taylor+17? We want to make sure we compare apples with apples :)
+
+line 146, when you say "refeence stars" I would give an estimaate/average of how many these are per field.
+
+line 148, please give a refeence for gaiaxp. You also may want to add the refeence for Gaia DR3 somewhere.
+
+line 151, I'm a bit puzzled by the expression "excellent agreement". You are extracintg the photometry from a spectrum and then showing the comparison with the spectrum itself, why wouldn't the agrement be excellent all the time? If you were showing a comparison with your photometry it would make more sense to qualify the comparison.
+
+Figure 3, you may want to say something about error bars in this plot. Does M17 not provide any uncertainties for the photometry? What is the origin of the medium-band photometry errors, I guess is a combination of photometric + calibration errors?
+
+Figure 3. I would also provide the magnitude, let's say in g_sdss, for both chosen clusters, so the reader has an ide of how faint these are.
+
+line 179, I would first define what do you mean by "reliable photometry" before referring the reader to Fig 4
+
+Figure 4 **IMPORTANT** The gradient in S/N is striking and seems to be unexplained. Why would those GCs at lower galactic latitude have higher S/N. IF anything, I would expect lower S/N given the slightly increased galactic extinctin towards the Galactic plane.
+
+line 198. Are  all M17 cluster candidates detected in all the narrow-band images? Perhaps it should be mentioned before if you did some force photometry on thse positions.
+
+line 213, what is the difference betwee tau and tau_main?
+
+line 223, please give a reference to this velocity (or give it in the introductino, as I suggest above)
+
+Sections 3.1 and 3.2 seem to be repeating several informations. Are these needed?
+
+Figure 5: *MILDY IMPORTANT* GC stellar masses come out of the blue. Are these given back by Cigale? Masses above 10**6 msun could raise an eyebrow. Are these masses consistent with the absoulte magnitude of these clusters? It seems these derived cluster masses are not discussed anywhere else in the paper either.
+
+Figure 5. Uncertainties in the fluxes look smaller here compared to Fig 3, is it becasue the log scale. Why a logscale here and not before, and as Ana mentions, why chose diffeent clusters than those in Fig 3?
+
+line 260. I'm confused about this comparison. Does CIGALE give you back [Fe/H] instead of [M/H]? Because you said before the grid was built with values of Z, which I understand translates more directly into [M/H].
+.
+Fig 6 reducido --> reduced
+
+line 294 is low S/N the explanation for these chi**2>2 fits? Or is CIGALE simply unable to reproduce those SEDs? If you have some high S/N measurements with porr fitting it may be evidence of multiple stellar populations, or an extended star formation, since as far as I can see the CIGALE fitting is for SSPs.
+
+Fig 7 since circles are plotted on top of each other is diffciult to see any real gradients. Apparent concentrations of certain colors may be just an atifact of how the plotting is made (which point is drawn first, and subsequently buried). Perhaps there's a better way to plot this?
+
+Fig 8, what happened to the clusters shown in Fig 6 down to [Fe/H]=-2? This figure shows a sharp cut aroun -1.7 that looks weird and seems unphysical.
+
+Sect 4.2 in general I miss a comparison with the MW age-metallicty relation for GCs (Leaman et al. 2013), where you see a similar trend to here, but without the very large clump of old, metal-rich clusters we see in Fig 9.
+
+I will not comment on the discussion, since all of you are more up-to-date with the relevant literature than me.
+
+One general final comment, you don't need to really implement it, although Ana mentions this as well. In several parts is mentioned how key and strategic the narow filters are, and yet, I don't see any comparison where the 12 filters show superiority over simply using the 5 SDSS filters. Be careful not to oversell results without backing them up with data. I also miss some cross-match with samples which already have confirmation via RVs, e.g. https://ui.adsabs.harvard.edu/abs/2023ApJ...947...34H/abstract
+
+I'm going to finish with an anecdote since I had a flashback about it reading the paper. Years ago I was in a paper written by Roberto de Propris who claimed that second parameter clusters in CenA had a higher spatial substructure (based on the Dressler & Schectman index, that was my contribution to the paper) than regular clusters and therefore they were likely an accreted population. He even entertained the idea to send it to Nature(!), but then it was rejected by ApJL and then had a bad review from MNRAS, without being a rejection, but he decided to withdraw the paper. The whole detection of second parameter clusters came from GALEX UV colors, if I remember corectly, but now I cannot find any papers using GALEX data for CenA GCs.
+
