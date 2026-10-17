@@ -1,545 +1,513 @@
 #!/usr/bin/env python3
-"""Completeness of the narrow-band imaging and of the scientific sample.
-
-Produces TWO separate figures, one per paper section:
-
-  snr_depth.pdf         -> Section 2 (photometry only, no CIGALE mentioned)
-                           7 filters, median S/N vs magnitude, S/N = 3 and 5 lines.
-
-  completeness.pdf      -> Section 3 (after CIGALE has been introduced)
-                           3 curves: photometric quality, CIGALE chi2_nu <= 2,
-                           and the combined fraction, vs r magnitude.
-
-The photometric quality cuts can be specified either as a single uniform
-threshold (--err-thresholds 0.2) or as a per-filter list matching the
-iterative selection adopted in the paper
-(--err-thresholds "F378:0.8,F395:0.7,F410:0.5,F430:0.5,F515:0.4,F660:0.3,F861:0.4").
-
-Usage:
-  # Paper selection (iterative per-filter thresholds)
-  python quantify_depth_completeness.py \\
-      --parent    all_fields_photometry_FULL_3209objects.csv \\
-      --cigale    CIGALE-DEcam-extinction/out/results.fits \\
-      --reference TAP_1_J_MNRAS_3444_gc.csv \\
-      --err-thresholds "F378:0.8,F395:0.7,F410:0.5,F430:0.5,F515:0.4,F660:0.3,F861:0.4" \\
-      --output-dir figures/completeness_paper
-
-  # Strict robustness test (uniform 0.2 mag)
-  python quantify_depth_completeness.py ... --err-thresholds 0.2 \\
-      --output-dir figures/completeness_strict
 """
+gc_sample_pipeline.py -- un solo script, un solo archivo de fotometria, todos los numeros.
 
+Todo se deriva del MISMO catalogo crudo, de forma determinista:
+
+  1. Deduplicacion de mediciones repetidas (campos superpuestos) -> fotometria canonica
+  2. Seleccion por calidad fotometrica                             -> muestra seleccionada
+  3. Diagnosticos: errores recortados (S/N = 2), filtros "reales",
+     comparacion con una seleccion previa (p.ej. OPTIMIZED_1394)
+  4. Profundidad narrow-band (S/N mediana vs magnitud)  -> Sect. 2  (padre: T17 con r valida)
+  5. Completitud vs r, vs radio proyectado y vs color    -> Sect. 3  (padre: P(GC) >= 0.7)
+
+Reproducir la muestra del paper (debe dar 1394):
+  python gc_sample_pipeline.py \\
+      --raw       all_fields_photometry_COMPLETE_extinction.csv \\
+      --reference TAP_1_J_MNRAS_3444_gc.csv \\
+      --cigale    CIGALE-DEcam-extinction/out/results.fits \\
+      --dedup first \\
+      --compare-selected all_fields_photometry_OPTIMIZED_1394objects.csv \\
+      --outdir run_paper
+
+Version mejorada para la revision (luego hay que volver a correr CIGALE):
+  python gc_sample_pipeline.py ... --dedup best --exclude-capped \\
+      --depth-xaxis r --keep-nonpositive-snr --outdir run_v2
+"""
 from __future__ import annotations
+
 import argparse
 import math
-import statistics
-from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+BANDS = ("F378", "F395", "F410", "F430", "F515", "F660", "F861")
+LABELS = {f: "J0" + f[1:] for f in BANDS}
+ERR_THR = {"F378": 0.8, "F395": 0.7, "F410": 0.5, "F430": 0.5,
+           "F515": 0.4, "F660": 0.3, "F861": 0.4}
+SNR_THR = {"F378": 1.5, "F395": 1.5, "F410": 2.0, "F430": 2.0,
+           "F515": 3.0, "F660": 4.0, "F861": 3.0}
+COLORS = {"F378": "#2b3a8f", "F395": "#3d5fbf", "F410": "#4f8ec9",
+          "F430": "#59b7a4", "F515": "#f0a63b", "F660": "#e05a3c",
+          "F861": "#8e2b2b"}
+CAP_ERR = 1.0857362047581296 / 2.0          # magerr equivalente a S/N = 2
+NGC5128 = ("13h25m27.6s", "-43d01m09s")
 
 
-NARROW_BANDS = ("F378", "F395", "F410", "F430", "F515", "F660", "F861")
-DEFAULT_THRESHOLDS = {
-    "F378": 0.8, "F395": 0.7, "F410": 0.5, "F430": 0.5,
-    "F515": 0.4, "F660": 0.3, "F861": 0.4,
-}
-FILTER_COLORS = {
-    "F378": "#2b3a8f", "F395": "#3d5fbf", "F410": "#4f8ec9",
-    "F430": "#59b7a4", "F515": "#f0a63b", "F660": "#e05a3c",
-    "F861": "#8e2b2b",
-}
-MAG_ERROR_FACTOR = 1.0857362047581296
-Z_SOLAR = 0.02
+# ----------------------------------------------------------------------------
+# utilidades
+# ----------------------------------------------------------------------------
+def norm_id(s: pd.Series) -> pd.Series:
+    """'1202', ' 1202 ', 1202.0 -> '1202'."""
+    return s.astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-def parse_thresholds(spec: str) -> Dict[str, float]:
-    """Accept 'F378:0.8,F395:0.7,...' or a single uniform float."""
-    spec = spec.strip()
-    try:
-        uniform = float(spec)
-        return {f: uniform for f in NARROW_BANDS}
-    except ValueError:
-        pass
-    thresholds = {}
-    for item in spec.split(","):
-        key, val = item.split(":")
-        thresholds[key.strip().upper()] = float(val)
-    for f in NARROW_BANDS:
-        thresholds.setdefault(f, DEFAULT_THRESHOLDS[f])
-    return thresholds
+def cols(f: str, ap: str) -> dict:
+    return {"err": f"MAGERR_{f}_{ap}_corr", "snr": f"SNR_{f}_{ap}",
+            "flux": f"FLUX_{f}_{ap}_corr", "mag": f"MAG_{f}_{ap}"}
 
 
-def find_error_columns(df: pd.DataFrame) -> Dict[str, str]:
-    found = {}
-    for f in NARROW_BANDS:
-        for suffix in ("_3_corr", "_3", ""):
-            col = f"MAGERR_{f}{suffix}"
-            if col in df.columns:
-                found[f] = col
-                break
-    return found
+def num(df: pd.DataFrame, c: str):
+    return pd.to_numeric(df[c], errors="coerce") if c in df.columns else None
 
 
-def find_snr_columns(df: pd.DataFrame) -> Dict[str, str]:
-    found = {}
-    for f in NARROW_BANDS:
-        col = f"SNR_{f}_3"
-        if col in df.columns:
-            found[f] = col
-        else:
-            for suffix in ("_3_corr", ""):
-                col2 = f"SNR_{f}{suffix}"
-                if col2 in df.columns:
-                    found[f] = col2
-                    break
-    return found
-
-
-def count_good_filters(
-    row: pd.Series,
-    err_cols: Dict[str, str],
-    thresholds: Dict[str, float],
-) -> int:
-    n = 0
-    for filt, col in err_cols.items():
-        val = row.get(col)
-        if pd.notna(val) and 0 < val < thresholds[filt]:
-            n += 1
-    return n
-
-
-def wilson(k: int, n: int, z: float = 1.0) -> Tuple[float, float]:
+def wilson(k: int, n: int, z: float = 1.0):
+    """Intervalo de Wilson (z=1 -> 68 %), en porcentaje."""
     if n == 0:
-        return 0.0, 0.0
+        return np.nan, np.nan
     p = k / n
-    denom = 1 + z**2 / n
-    center = (p + z**2 / (2 * n)) / denom
-    half = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / denom
-    return 100 * max(0.0, center - half), 100 * min(1.0, center + half)
+    den = 1 + z**2 / n
+    c = (p + z**2 / (2 * n)) / den
+    h = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / den
+    return 100 * max(0.0, c - h), 100 * min(1.0, c + h)
 
 
-def magnitude_bin(v: float, w: float) -> float:
-    return math.floor(v / w) * w
-
-
-def estimate_snr_depth(
-    curve: Sequence[dict], threshold: float, bin_width: float
-) -> Optional[float]:
-    pts = [(p["bin_center"], p["median_snr"])
-           for p in curve if p["median_snr"] is not None]
-    pts.sort()
-    for (mb, sb), (mf, sf) in zip(pts, pts[1:]):
-        if (sb >= threshold and sf < threshold and mf > mb
-                and mf - mb <= bin_width + 1e-6):
-            f = (threshold - sb) / (sf - sb)
-            return mb + f * (mf - mb)
+def crossing(g: pd.DataFrame, thr: float, bw: float):
+    """Magnitud donde la S/N mediana cruza thr (interpolacion lineal entre bins contiguos)."""
+    g = g.sort_values("bin")
+    pts = list(zip(g["bin"], g["median_snr"]))
+    for (m0, s0), (m1, s1) in zip(pts, pts[1:]):
+        if s0 >= thr > s1 and 0 < m1 - m0 <= bw + 1e-6:
+            return m0 + (thr - s0) / (s1 - s0) * (m1 - m0)
     return None
 
 
-def write_csv(path: Path, rows: Sequence[dict], cols: Sequence[str]) -> None:
-    import csv as _csv
-    with path.open("w", encoding="utf-8", newline="") as h:
-        w = _csv.DictWriter(h, fieldnames=cols, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
+# ----------------------------------------------------------------------------
+# 1. deduplicacion
+# ----------------------------------------------------------------------------
+def deduplicate(raw: pd.DataFrame, mode: str, key: list, ap: str) -> pd.DataFrame:
+    if mode == "first":
+        out = raw.drop_duplicates(subset=key, keep="first")
+    else:  # "best": mayor S/N en J0660 + J0861; empates -> orden del archivo
+        score = pd.Series(0.0, index=raw.index)
+        for f in ("F660", "F861"):
+            s = num(raw, cols(f, ap)["snr"])
+            if s is not None:
+                score += s.fillna(-1e6)
+        out = (raw.assign(_score=score)
+                  .sort_values("_score", ascending=False, kind="mergesort")
+                  .drop_duplicates(subset=key, keep="first")
+                  .drop(columns="_score")
+                  .sort_index())
+    print(f"[dedup:{mode}] {len(raw)} filas -> {len(out)} objetos unicos "
+          f"({len(raw) - len(out)} duplicados eliminados)")
+    return out.copy()
 
 
-# ---------------------------------------------------------------------------
-# Figure 1 (Section 2): S/N vs magnitude
-# ---------------------------------------------------------------------------
-def make_snr_figure(
-    snr_curves: Dict[str, List[dict]],
-    out_path: Path,
-    bin_width: float,
-    min_n_per_bin: int = 5,
-    xlim: Tuple[float, float] = (17.0, 22.5),
-) -> None:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+# ----------------------------------------------------------------------------
+# 2. seleccion
+# ----------------------------------------------------------------------------
+def good_masks(df, ap, err_thr, snr_thr, cap, tol):
+    good, capped = {}, {}
+    for f in BANDS:
+        c = cols(f, ap)
+        e = num(df, c["err"])
+        if e is None:
+            continue
+        m = e.notna() & (e > 0) & (e < err_thr[f])
+        s = num(df, c["snr"])
+        if s is not None:
+            m &= s.notna() & (s >= snr_thr[f])
+        fl = num(df, c["flux"])
+        if fl is not None:
+            m &= fl.notna() & (fl > 0)
+        good[f] = m
+        capped[f] = e.notna() & ((e - cap).abs() <= tol)
+    return good, capped
 
+
+# ----------------------------------------------------------------------------
+# 4. profundidad
+# ----------------------------------------------------------------------------
+def depth_curves(df, ap, xaxis, rcol, bw, keep_nonpos, cap, tol, min_n):
+    curves, depths = {}, []
+    for f in BANDS:
+        c = cols(f, ap)
+        s, e = num(df, c["snr"]), num(df, c["err"])
+        x = df[rcol] if xaxis == "r" else num(df, c["mag"])
+        if s is None or x is None:
+            continue
+        ok = x.notna() & (x > 0) & (x < 90) & s.notna()
+        if not keep_nonpos:
+            ok &= s > 0
+        d = pd.DataFrame({"x": x[ok], "snr": s[ok]})
+        d["capped"] = ((e[ok] - cap).abs() <= tol) if e is not None else False
+        d["bin"] = np.floor(d["x"] / bw) * bw + bw / 2
+        g = (d.groupby("bin")
+               .agg(n=("snr", "size"), median_snr=("snr", "median"),
+                    frac_capped=("capped", "mean"))
+               .reset_index())
+        g.insert(0, "filter", f)
+        curves[f] = g
+        use = g[g["n"] >= min_n]
+        depths.append({"filter": f, "n_objects": int(ok.sum()),
+                       "depth_snr3": crossing(use, 3.0, bw),
+                       "depth_snr5": crossing(use, 5.0, bw)})
+    return curves, pd.DataFrame(depths)
+
+
+# ----------------------------------------------------------------------------
+# 5. completitud
+# ----------------------------------------------------------------------------
+def completeness(parent: pd.DataFrame, group: pd.Series, xname: str, xval: pd.Series):
+    rows = []
+    for key, grp in parent.groupby(group, observed=True):
+        n = len(grp)
+        kp, kf, kb = (int(grp[c].sum()) for c in ("has_good_phot", "has_good_fit", "combined"))
+        pl, ph = wilson(kp, n)
+        bl, bh = wilson(kb, n)
+        sl, sh = wilson(kb, kp)
+        xv = float(key.mid) if (xname == "r" and hasattr(key, "mid")) else float(xval.loc[grp.index].median())
+        rows.append({xname: xv, "bin": str(key), "n_parent": n,
+                     "n_phot": kp, "frac_phot": 100 * kp / n, "phot_lo": pl, "phot_hi": ph,
+                     "n_fit": kf, "n_both": kb, "frac_both": 100 * kb / n,
+                     "both_lo": bl, "both_hi": bh,
+                     "chi2_survival": 100 * kb / kp if kp else np.nan,
+                     "surv_lo": sl, "surv_hi": sh})
+    return pd.DataFrame(rows)
+
+
+# ----------------------------------------------------------------------------
+# figuras
+# ----------------------------------------------------------------------------
+def _style(legend_fs):
+    """Estilo original de quantify_depth_completeness.py."""
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["DejaVu Serif", "Times New Roman", "Times"],
-        "font.size": 9,
-        "axes.linewidth": 0.8,
+        "font.size": 9, "axes.linewidth": 0.8,
         "xtick.major.width": 0.8, "ytick.major.width": 0.8,
         "xtick.direction": "in", "ytick.direction": "in",
         "xtick.top": True, "ytick.right": True,
-        "legend.frameon": False, "legend.fontsize": 7.0,
+        "legend.frameon": False, "legend.fontsize": legend_fs,
         "axes.labelsize": 9.5, "figure.dpi": 150,
     })
 
+
+def fig_depth(curves, out, xaxis, min_n, xlim, ylim=(1.0, 200.0)):
+    _style(7.0)
     fig, ax = plt.subplots(figsize=(4.4, 3.3), constrained_layout=True)
-
-    for filt in NARROW_BANDS:
-        curve = snr_curves.get(filt, [])
-        pts = [
-            (p["bin_center"], p["median_snr"])
-            for p in curve
-            if p["median_snr"] is not None and p["n_with_snr"] >= min_n_per_bin
-        ]
-        if not pts:
+    for f in BANDS:
+        g = curves.get(f)
+        if g is None:
             continue
-        pts.sort()
-        xs, ys = zip(*pts)
-        ax.plot(
-            xs, ys, marker="o", markersize=2.5, linewidth=0.9,
-            color=FILTER_COLORS[filt], label=filt,
-        )
-
+        g = g[g["n"] >= min_n].sort_values("bin")
+        if g.empty:
+            continue
+        ax.plot(g["bin"], g["median_snr"], marker="o", markersize=3.5, linewidth=0.9,
+                color=COLORS[f], label=LABELS[f])
     ax.axhline(5.0, color="0.4", linestyle="--", linewidth=0.7)
     ax.axhline(3.0, color="0.4", linestyle=":", linewidth=0.7)
-    ax.text(0.98, 0.96, r"S/N $=5$", transform=ax.transAxes,
-            ha="right", va="top", fontsize=7.5, color="0.35")
-    ax.text(0.98, 0.86, r"S/N $=3$", transform=ax.transAxes,
-            ha="right", va="top", fontsize=7.5, color="0.35")
-
-    ax.set_xlabel("Magnitude (bin centre, mag)")
-    ax.set_ylabel("Median S/N")
+    ylo, yhi = ylim
+    f5 = (np.log10(5.0) - np.log10(ylo)) / (np.log10(yhi) - np.log10(ylo))
+    f3 = (np.log10(3.0) - np.log10(ylo)) / (np.log10(yhi) - np.log10(ylo))
+    ax.text(0.18, f5, r"S/N $=5$", transform=ax.transAxes,
+            ha="right", va="bottom", fontsize=10., color="0.35")
+    ax.text(0.18, f3, r"S/N $=3$", transform=ax.transAxes,
+            ha="right", va="bottom", fontsize=10., color="0.35")
+    ax.set_xlabel(r"$r$-mag" if xaxis == "r" else "Narrow-band magnitude (mag)", fontsize=15)
+    ax.set_ylabel("Median S/N", fontsize=15)
     ax.set_yscale("log")
+    ax.tick_params(axis="both", which="major", labelsize=13)
     ax.set_xlim(*xlim)
-    ax.set_ylim(0.5, 200)
-    ax.legend(loc="lower left", ncol=2, columnspacing=0.8,
-              handlelength=1.2, borderaxespad=0.4)
-    ax.grid(True, which="major", color="0.9", linewidth=0.5)
+    ax.set_ylim(*ylim)
+    ax.legend(loc="upper right", ncol=2, columnspacing=0.8,
+              handlelength=1.2, borderaxespad=0.4, fontsize=10)
     ax.set_axisbelow(True)
-
-    fig.savefig(out_path, bbox_inches="tight")
-    if out_path.suffix == ".pdf":
-        fig.savefig(out_path.with_suffix(".png"), bbox_inches="tight", dpi=300)
+    fig.savefig(out, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# Figure 2 (Section 3): completeness vs r
-# ---------------------------------------------------------------------------
-def make_completeness_figure(
-    combined_df: pd.DataFrame,
-    out_path: Path,
-    chi2_max: float,
-) -> None:
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    plt.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["DejaVu Serif", "Times New Roman", "Times"],
-        "font.size": 9,
-        "axes.linewidth": 0.8,
-        "xtick.major.width": 0.8, "ytick.major.width": 0.8,
-        "xtick.direction": "in", "ytick.direction": "in",
-        "xtick.top": True, "ytick.right": True,
-        "legend.frameon": False, "legend.fontsize": 7.5,
-        "axes.labelsize": 9.5, "figure.dpi": 150,
-    })
-
+def fig_completeness(tab, xname, xlabel, out, chi2_max, logx=False):
+    _style(7.5)
     fig, ax = plt.subplots(figsize=(4.4, 3.3), constrained_layout=True)
-
-    x = combined_df["r_center"].values
-    ax.errorbar(
-        x, combined_df["frac_phot"],
-        yerr=[combined_df["frac_phot"] - combined_df["phot_lo"],
-              combined_df["phot_hi"] - combined_df["frac_phot"]],
-        marker="s", markersize=3.5, linewidth=1.0, capsize=2,
-        color="#3d5fbf", label="Photometric quality",
-    )
-    ax.errorbar(
-        x, combined_df["frac_fit"],
-        yerr=[combined_df["frac_fit"] - combined_df["fit_lo"],
-              combined_df["fit_hi"] - combined_df["frac_fit"]],
-        marker="^", markersize=3.5, linewidth=1.0, capsize=2,
-        color="#e05a3c",
-        label=rf"CIGALE $\chi^2_\nu \leq {chi2_max}$",
-    )
-    ax.errorbar(
-        x, combined_df["frac_both"],
-        yerr=[combined_df["frac_both"] - combined_df["both_lo"],
-              combined_df["both_hi"] - combined_df["frac_both"]],
-        marker="o", markersize=3.5, linewidth=1.2, capsize=2,
-        color="#2b3a8f", label="Both",
-    )
-
+    x = tab[xname].to_numpy(float)
+    y = tab["frac_phot"].to_numpy(float)
+    ax.errorbar(x, y,
+                yerr=np.vstack([np.clip(y - tab["phot_lo"], 0, None),
+                                np.clip(tab["phot_hi"] - y, 0, None)]),
+                marker="s", markersize=3.5, linewidth=1.0, capsize=2,
+                color="#3d5fbf", label="Photometric quality")
+    y = tab["frac_both"].to_numpy(float)
+    ax.errorbar(x, y,
+                yerr=np.vstack([np.clip(y - tab["both_lo"], 0, None),
+                                np.clip(tab["both_hi"] - y, 0, None)]),
+                marker="o", markersize=3.5, linewidth=1.2, capsize=2,
+                color="#2b3a8f",
+                label=rf"Photometric $+$ CIGALE $\chi^2_\nu \leq {chi2_max}$")
     ax.axhline(50.0, color="0.4", linestyle=":", linewidth=0.7)
     ax.axhline(90.0, color="0.4", linestyle="--", linewidth=0.7)
-    ax.text(0.02, 0.51, "50%", transform=ax.transAxes,
-            fontsize=7, color="0.4")
-    ax.text(0.02, 0.91, "90%", transform=ax.transAxes,
-            fontsize=7, color="0.4")
-
-    ax.set_xlabel(r"$r$ magnitude")
-    ax.set_ylabel("Fraction of T17 parent sample (%)")
+    ax.text(0.02, 0.43, "50%", transform=ax.transAxes, fontsize=10, color="0.4")
+    ax.text(0.02, 0.81, "90%", transform=ax.transAxes, fontsize=10, color="0.4")
+    if logx:
+        ax.set_xscale("log")
+    ax.set_xlabel(xlabel, fontsize=15)
+    ax.set_ylabel("Fraction of GC initial sample (%)", fontsize=12)
     ax.set_ylim(0, 105)
-    ax.legend(loc="lower left")
-    ax.grid(True, color="0.9", linewidth=0.5)
+    ax.legend(loc="lower left", fontsize=10)
+    ax.tick_params(axis="both", which="major", labelsize=13)
     ax.set_axisbelow(True)
-
-    fig.savefig(out_path, bbox_inches="tight")
-    if out_path.suffix == ".pdf":
-        fig.savefig(out_path.with_suffix(".png"), bbox_inches="tight", dpi=300)
+    fig.savefig(out, bbox_inches="tight")
+    fig.savefig(out.with_suffix(".png"), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument("--parent", required=True, type=Path,
-                   help="Full-sample photometry CSV (with T17ID and filter columns).")
-    p.add_argument("--cigale", required=True, type=Path,
-                   help="CIGALE FITS output (hdu=1).")
-    p.add_argument("--reference", required=True, type=Path,
-                   help="TAP catalog with T17ID and rmag.")
-    p.add_argument("--reference-mag", default="rmag")
+# ----------------------------------------------------------------------------
+# main
+# ----------------------------------------------------------------------------
+def parse():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--raw", required=True, type=Path,
+                   help="Catalogo crudo con todas las mediciones (p.ej. COMPLETE_extinction.csv)")
+    p.add_argument("--reference", required=True, type=Path, help="Catalogo T17 (ID, r, ...)")
+    p.add_argument("--cigale", type=Path, default=None, help="results.fits de CIGALE (opcional)")
+    p.add_argument("--compare-selected", type=Path, default=None,
+                   help="Seleccion previa para verificar (p.ej. OPTIMIZED_1394objects.csv)")
+    p.add_argument("--outdir", type=Path, default=Path("gc_pipeline_out"))
     p.add_argument("--id-col", default="T17ID")
-    p.add_argument("--cigale-id-col", default="id")
-    p.add_argument("--aperture", default="3",
-                   help="Aperture suffix for MAG/SNR/MAGERR columns (default 3).")
-    p.add_argument(
-        "--err-thresholds",
-        default="F378:0.8,F395:0.7,F410:0.5,F430:0.5,F515:0.4,F660:0.3,F861:0.4",
-        help="Either a single float (uniform cut) or 'FILTER:VALUE,...' per-filter.",
-    )
+    p.add_argument("--rmag-col", default="rmag")
+    p.add_argument("--color-cols", nargs=2, default=None, metavar=("BLUE", "RED"),
+                   help="Columnas del catalogo T17 para el color (p.ej. gmag imag)")
+    p.add_argument("--ra-col", default="RAJ2000")
+    p.add_argument("--dec-col", default="DEJ2000")
+    p.add_argument("--distance-mpc", type=float, default=3.8)
+    p.add_argument("--aperture", default="3")
+    p.add_argument("--dedup", choices=("first", "best"), default="first",
+                   help="first = reproduce el paper; best = mayor S/N en J0660+J0861")
+    p.add_argument("--dedup-key", nargs="+", default=["RAJ2000", "DEJ2000"])
     p.add_argument("--min-filters", type=int, default=3)
+    p.add_argument("--require", nargs="*", default=[], choices=BANDS,
+                   help="Filtros que deben ser buenos y NO recortados (p.ej. F660 F861)")
+    p.add_argument("--exclude-capped", action="store_true",
+                   help="No contar como 'buenos' los filtros con error recortado (S/N=2)")
+    p.add_argument("--cap-tol", type=float, default=2e-3)
+    p.add_argument("--prob-min", type=float, default=0.7, help="Padre de la Sect. 3")
+    p.add_argument("--depth-prob-min", type=float, default=0.0, help="Padre de la Sect. 2")
     p.add_argument("--chi2-max", type=float, default=2.0)
+    p.add_argument("--depth-xaxis", choices=("own", "r"), default="own")
+    p.add_argument("--keep-nonpositive-snr", action="store_true")
     p.add_argument("--bin-width", type=float, default=0.5)
-    p.add_argument("--min-bin-size", type=int, default=10,
-                   help="Min objects per bin for the completeness curve (default 10).")
-    p.add_argument("--min-n-per-snr-bin", type=int, default=5,
-                   help="Min objects per magnitude bin to plot an S/N point "
-                        "(default 5).")
-    p.add_argument("--snr-xlim-low", type=float, default=17.0)
-    p.add_argument("--snr-xlim-high", type=float, default=22.5)
-    p.add_argument("--plot-format", choices=("pdf", "png"), default="pdf")
-    p.add_argument("--output-dir", type=Path, default=Path("completeness"))
-    return p
+    p.add_argument("--min-n-per-bin", type=int, default=3)
+    p.add_argument("--min-bin-size", type=int, default=10)
+    p.add_argument("--n-radial-bins", type=int, default=6)
+    p.add_argument("--depth-xlim", nargs=2, type=float, default=(15.5, 22.5))
+    return p.parse_args()
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 def main() -> int:
-    args = build_parser().parse_args()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    a = parse()
+    a.outdir.mkdir(parents=True, exist_ok=True)
+    log = []
 
-    thresholds = parse_thresholds(args.err_thresholds)
-    print("Per-filter error thresholds used:")
-    for f in NARROW_BANDS:
-        print(f"  {f}: {thresholds[f]:.2f} mag")
-    print(f"Min filters passing: {args.min_filters}")
-    print(f"chi2_max: {args.chi2_max}\n")
+    def say(msg=""):
+        print(msg)
+        log.append(msg)
 
-    # --- Load inputs -----------------------------------------------------
-    parent = pd.read_csv(args.parent)
-    parent[args.id_col] = parent[args.id_col].astype(str).str.strip()
+    say(f"Configuracion: dedup={a.dedup}, min_filters={a.min_filters}, "
+        f"exclude_capped={a.exclude_capped}, require={a.require}, "
+        f"prob_min={a.prob_min}, depth_prob_min={a.depth_prob_min}, "
+        f"depth_xaxis={a.depth_xaxis}, keep_nonpositive_snr={a.keep_nonpositive_snr}")
 
-    ref = pd.read_csv(args.reference)[[args.id_col, args.reference_mag]]
-    ref[args.id_col] = ref[args.id_col].astype(str).str.strip()
-    ref = ref.drop_duplicates(subset=args.id_col, keep="first")
-    rmag_map = dict(zip(ref[args.id_col], ref[args.reference_mag]))
+    # --- 1. fotometria canonica ------------------------------------------------
+    raw = pd.read_csv(a.raw)
+    raw[a.id_col] = norm_id(raw[a.id_col])
+    phot = deduplicate(raw, a.dedup, a.dedup_key, a.aperture)
+    say(f"Objetos unicos: {len(phot)}")
+    if phot[a.id_col].duplicated().any():
+        say(f"AVISO: {phot[a.id_col].duplicated().sum()} IDs repetidos tras deduplicar por "
+            f"{a.dedup_key}; revisa la clave de deduplicacion.")
 
-    from astropy.table import Table
-    cig = Table.read(str(args.cigale), hdu=1).to_pandas()
-    cig_id = args.cigale_id_col if args.cigale_id_col in cig.columns else "id"
-    cig[cig_id] = cig[cig_id].astype(str).str.strip()
-    cig = cig[[cig_id, "best.reduced_chi_square"]].rename(
-        columns={cig_id: args.id_col, "best.reduced_chi_square": "redchi2"}
-    )
+    usecols = [a.id_col, a.rmag_col] + (list(a.color_cols) if a.color_cols else [])
+    ref = pd.read_csv(a.reference)
+    missing = [c for c in usecols if c not in ref.columns]
+    if missing:
+        raise SystemExit(f"Columnas ausentes en --reference: {missing}")
+    ref = ref[usecols].copy()
+    ref[a.id_col] = norm_id(ref[a.id_col])
+    ref = ref.drop_duplicates(a.id_col).rename(columns={a.rmag_col: "r_T17"})
+    phot = phot.drop(columns=[c for c in ref.columns if c != a.id_col and c in phot.columns])
+    phot = phot.merge(ref, on=a.id_col, how="left")
+    r = pd.to_numeric(phot["r_T17"], errors="coerce")
+    phot["valid_r"] = r.notna() & (r > 0) & (r < 30)
 
-    err_cols = find_error_columns(parent)
-    snr_cols = find_snr_columns(parent)
-    print(f"Error columns found: {list(err_cols.values())}")
-    print(f"SNR columns found  : {list(snr_cols.values())}\n")
+    prob = num(phot, "Prob")
+    if prob is None:
+        say("AVISO: sin columna 'Prob'; se asume P(GC)=1 para todos.")
+        prob = pd.Series(1.0, index=phot.index)
+    phot["in_prob"] = prob >= a.prob_min
 
-    # --- Per-object classification ---------------------------------------
-    parent = parent.copy()
-    parent[args.reference_mag] = parent[args.id_col].map(rmag_map).astype(float)
-    parent["n_good_filters"] = parent.apply(
-        lambda r: count_good_filters(r, err_cols, thresholds), axis=1
-    )
-    parent = parent.merge(cig, on=args.id_col, how="left")
-    parent["has_good_phot"] = parent["n_good_filters"] >= args.min_filters
-    parent["has_good_fit"] = (
-        parent["redchi2"].notna() & (parent["redchi2"] <= args.chi2_max)
-    )
-    parent["combined"] = parent["has_good_phot"] & parent["has_good_fit"]
+    # --- 2. seleccion -----------------------------------------------------------
+    good, capped = good_masks(phot, a.aperture, ERR_THR, SNR_THR, CAP_ERR, a.cap_tol)
+    phot["n_good"] = sum(m.astype(int) for m in good.values())
+    phot["n_real_good"] = sum((good[f] & ~capped[f]).astype(int) for f in good)
+    for f in good:
+        phot[f"capped_{f}"] = capped[f]
+    count = phot["n_real_good"] if a.exclude_capped else phot["n_good"]
+    sel = count >= a.min_filters
+    for f in a.require:
+        sel &= good[f] & ~capped[f]
+    phot["has_good_phot"] = sel
 
-    parent = parent[
-        parent[args.reference_mag].notna()
-        & (parent[args.reference_mag] > 0)
-        & (parent[args.reference_mag] < 30)
-    ]
+    # --- CIGALE -----------------------------------------------------------------
+    phot["redchi2"] = np.nan
+    if a.cigale is not None:
+        from astropy.table import Table
+        cig = Table.read(str(a.cigale), hdu=1).to_pandas()
+        cig = pd.DataFrame({a.id_col: norm_id(cig["id"].astype(str)),
+                            "redchi2": cig["best.reduced_chi_square"]}).drop_duplicates(a.id_col)
+        phot = phot.drop(columns="redchi2").merge(cig, on=a.id_col, how="left")
+        say(f"CIGALE: {len(cig)} objetos ajustados, {int((cig.redchi2 <= a.chi2_max).sum())} "
+            f"con chi2_nu <= {a.chi2_max:g}")
+    phot["has_good_fit"] = phot["redchi2"].notna() & (phot["redchi2"] <= a.chi2_max)
+    phot["combined"] = phot["has_good_phot"] & phot["has_good_fit"]
 
-    n_parent = len(parent)
-    n_phot = int(parent["has_good_phot"].sum())
-    n_fit = int(parent["has_good_fit"].sum())
-    n_both = int(parent["combined"].sum())
+    selected = phot[phot["in_prob"] & phot["has_good_phot"]]
+    final = selected[selected["has_good_fit"]]
+    say(f"\nP(GC) >= {a.prob_min}: {int(phot['in_prob'].sum())}")
+    say(f"Seleccion fotometrica: {len(selected)}")
+    say(f"Muestra final (+ chi2_nu <= {a.chi2_max:g}): {len(final)}")
+    if a.cigale is not None:
+        n_fit_in = int((phot["has_good_fit"] & phot["in_prob"]).sum())
+        if n_fit_in != len(final):
+            say(f"AVISO: {n_fit_in - len(final)} buenos ajustes de CIGALE quedan FUERA de esta "
+                "seleccion -> la fotometria/seleccion no coincide con la que vio CIGALE.")
 
-    print(f"Parent objects with valid rmag: {n_parent}")
-    print(f"  with good photometry      : {n_phot}")
-    print(f"  with good SED fit         : {n_fit}")
-    print(f"  with both (combined)      : {n_both}\n")
+    # --- 3. diagnosticos --------------------------------------------------------
+    say("\nDiagnostico por filtro (muestra seleccionada | muestra final):")
+    say("  filtro  recortados   %recort.  S/N>3 (final)  S/N>5 (final)")
+    diag = []
+    for f in good:
+        s = num(final, cols(f, a.aperture)["snr"])
+        n3 = int((s > 3).sum()) if s is not None else 0
+        n5 = int((s > 5).sum()) if s is not None else 0
+        nc = int(selected[f"capped_{f}"].sum())
+        diag.append({"filter": f, "n_capped_selected": nc,
+                     "pct_capped_selected": 100 * nc / max(len(selected), 1),
+                     "pct_snr3_final": 100 * n3 / max(len(final), 1),
+                     "pct_snr5_final": 100 * n5 / max(len(final), 1)})
+        say(f"  {LABELS[f]}  {nc:9d}   {diag[-1]['pct_capped_selected']:7.1f}"
+            f"  {diag[-1]['pct_snr3_final']:12.1f}  {diag[-1]['pct_snr5_final']:12.1f}")
+    pd.DataFrame(diag).to_csv(a.outdir / "diagnostics_per_filter.csv", index=False)
+    nr = selected["n_real_good"]
+    say(f"Seleccionados con >= {a.min_filters} filtros buenos NO recortados: "
+        f"{int((nr >= a.min_filters).sum())} de {len(selected)}")
+    say("Distribucion de n_real_good en la seleccion: "
+        + ", ".join(f"{k}:{v}" for k, v in nr.value_counts().sort_index().items()))
 
-    # --- S/N curves per filter -------------------------------------------
-    snr_curves: Dict[str, List[dict]] = {f: [] for f in NARROW_BANDS}
-    snr_depth_rows: List[dict] = []
-    for filt in NARROW_BANDS:
-        snr_by_bin: Dict[float, List[float]] = defaultdict(list)
-        err_by_bin: Dict[float, List[float]] = defaultdict(list)
-        mag_col = f"MAG_{filt}_{args.aperture}"
-        for _, row in parent.iterrows():
-            mag = row.get(mag_col)
-            if pd.isna(mag) or mag <= 0 or mag >= 90:
-                continue
-            b = magnitude_bin(float(mag), args.bin_width)
-            snr_col = snr_cols.get(filt)
-            if snr_col is not None:
-                s = row.get(snr_col)
-                if pd.notna(s) and s > 0:
-                    snr_by_bin[b].append(float(s))
-            err_col = err_cols.get(filt)
-            if err_col is not None:
-                e = row.get(err_col)
-                if pd.notna(e) and e > 0:
-                    err_by_bin[b].append(float(e))
-        for b in sorted(set(snr_by_bin) | set(err_by_bin)):
-            snrs = snr_by_bin.get(b, [])
-            errs = err_by_bin.get(b, [])
-            snr_curves[filt].append({
-                "bin_center": b + args.bin_width / 2,
-                "n_with_snr": len(snrs),
-                "median_snr": statistics.median(snrs) if snrs else None,
-                "n_with_err": len(errs),
-                "median_err": statistics.median(errs) if errs else None,
-            })
-        curve = snr_curves[filt]
-        snr_depth_rows.append({
-            "filter": filt,
-            "snr_depth_3": estimate_snr_depth(curve, 3.0, args.bin_width),
-            "snr_depth_5": estimate_snr_depth(curve, 5.0, args.bin_width),
-        })
+    if a.compare_selected is not None:
+        old = pd.read_csv(a.compare_selected)
+        old[a.id_col] = norm_id(old[a.id_col])
+        A, B = set(selected[a.id_col]), set(old[a.id_col])
+        say(f"\nComparacion con {a.compare_selected.name}: en ambas {len(A & B)}, "
+            f"solo nueva {len(A - B)}, solo previa {len(B - A)}")
+        m = phot.merge(old, on=a.id_col, suffixes=("", "_old"))
+        for f in BANDS:
+            c = cols(f, a.aperture)["err"]
+            if c in m.columns and c + "_old" in m.columns:
+                d = (pd.to_numeric(m[c], errors="coerce")
+                     - pd.to_numeric(m[c + "_old"], errors="coerce")).abs()
+                say(f"  {LABELS[f]}: {int((d > 1e-4).sum())} objetos con MAGERR distinto "
+                    f"(max {d.max():.3f})")
 
-    # --- Combined completeness vs rmag -----------------------------------
-    bins = np.arange(15.0, 23.0 + 1e-9, args.bin_width)
-    parent["bin"] = pd.cut(parent[args.reference_mag], bins)
-    grouped = parent.groupby("bin", observed=True)
+    # --- 4. profundidad (Sect. 2) -----------------------------------------------
+    if a.depth_prob_min > 0:
+        pdepth = phot[phot["valid_r"] & (prob >= a.depth_prob_min)]
+    else:
+        pdepth = phot[phot["valid_r"]]
+    curves, depths = depth_curves(pdepth, a.aperture, a.depth_xaxis, "r_T17", a.bin_width,
+                                  a.keep_nonpositive_snr, CAP_ERR, a.cap_tol, a.min_n_per_bin)
+    say(f"\nProfundidad (padre = {len(pdepth)}, eje x = {a.depth_xaxis}):")
+    for _, rw in depths.iterrows():
+        d3 = f"{rw.depth_snr3:.2f}" if pd.notna(rw.depth_snr3) else "n/a"
+        d5 = f"{rw.depth_snr5:.2f}" if pd.notna(rw.depth_snr5) else "n/a"
+        say(f"  {LABELS[rw['filter']]}: S/N=3 -> {d3}   S/N=5 -> {d5}")
+    depths.to_csv(a.outdir / "depth_per_filter.csv", index=False)
+    pd.concat(curves.values()).to_csv(a.outdir / "depth_curves.csv", index=False)
+    fig_depth(curves, a.outdir / "snr_depth.pdf", a.depth_xaxis, a.min_n_per_bin,
+              tuple(a.depth_xlim))
 
-    rows = []
-    for interval, grp in grouped:
-        n = len(grp)
-        if n < args.min_bin_size:
-            continue
-        k_phot = int(grp["has_good_phot"].sum())
-        k_fit = int(grp["has_good_fit"].sum())
-        k_both = int(grp["combined"].sum())
-        phot_lo, phot_hi = wilson(k_phot, n)
-        fit_lo, fit_hi = wilson(k_fit, n)
-        both_lo, both_hi = wilson(k_both, n)
-        rows.append({
-            "r_center": interval.mid, "n_parent": n,
-            "n_phot": k_phot, "frac_phot": 100 * k_phot / n,
-            "phot_lo": phot_lo, "phot_hi": phot_hi,
-            "n_fit": k_fit, "frac_fit": 100 * k_fit / n,
-            "fit_lo": fit_lo, "fit_hi": fit_hi,
-            "n_both": k_both, "frac_both": 100 * k_both / n,
-            "both_lo": both_lo, "both_hi": both_hi,
-        })
-    combined_df = pd.DataFrame(rows)
+    # --- 5. completitud (Sect. 3) -----------------------------------------------
+    parent = phot[phot["in_prob"] & phot["valid_r"]].copy()
+    say(f"\nCompletitud: padre = {len(parent)}")
+    rr = pd.to_numeric(parent["r_T17"], errors="coerce")
+    edges = np.arange(15.0, 23.0 + 1e-9, a.bin_width)
+    rbin = pd.cut(rr, edges)
+    tab_r = completeness(parent, rbin, "r", rr)
+    tab_r = tab_r[tab_r["n_parent"] >= a.min_bin_size]
+    tab_r.to_csv(a.outdir / "completeness_vs_r.csv", index=False)
+    fig_completeness(tab_r, "r", r"$r$-mag", a.outdir / "completeness_r.pdf", a.chi2_max)
+    say(tab_r[["r", "n_parent", "frac_phot", "frac_both", "chi2_survival"]]
+        .to_string(index=False, float_format="%.1f"))
 
-    subsample_med = float(np.median(
-        parent[parent["combined"]][args.reference_mag]
-    )) if n_both else float("nan")
-    parent_med = float(np.median(parent[args.reference_mag]))
+    if a.ra_col in parent.columns and a.dec_col in parent.columns:
+        from astropy.coordinates import SkyCoord
+        import astropy.units as u
+        c0 = SkyCoord(*NGC5128)
+        cc = SkyCoord(pd.to_numeric(parent[a.ra_col]).values * u.deg,
+                      pd.to_numeric(parent[a.dec_col]).values * u.deg)
+        parent["R_kpc"] = cc.separation(c0).rad * a.distance_mpc * 1e3
+        rad_edges = np.unique(np.quantile(parent["R_kpc"],
+                                          np.linspace(0, 1, a.n_radial_bins + 1)))
+        tab_R = completeness(parent, pd.cut(parent["R_kpc"], rad_edges, include_lowest=True),
+                             "R_kpc", parent["R_kpc"])
+        tab_R.to_csv(a.outdir / "completeness_vs_radius.csv", index=False)
+        fig_completeness(tab_R, "R_kpc", "Projected radius (kpc)",
+                         a.outdir / "completeness_radius.pdf", a.chi2_max, logx=True)
+        say("\nCompletitud vs radio (todas las magnitudes):")
+        say(tab_R[["R_kpc", "n_parent", "frac_phot", "frac_both", "chi2_survival"]]
+            .to_string(index=False, float_format="%.1f"))
+        # control: radio a magnitud fija (r < 20.3, donde la completitud en r es plana)
+        bright = parent[rr < 20.3]
+        if len(bright) >= 3 * a.min_bin_size:
+            tab_Rb = completeness(bright, pd.cut(bright["R_kpc"], rad_edges, include_lowest=True),
+                                  "R_kpc", bright["R_kpc"])
+            tab_Rb.to_csv(a.outdir / "completeness_vs_radius_r_lt_20.3.csv", index=False)
+            say("\nCompletitud vs radio (solo r < 20.3):")
+            say(tab_Rb[["R_kpc", "n_parent", "frac_phot", "frac_both", "chi2_survival"]]
+                .to_string(index=False, float_format="%.1f"))
+    else:
+        say(f"Sin columnas {a.ra_col}/{a.dec_col}: se omite la completitud vs radio.")
 
-    # --- Write CSVs ------------------------------------------------------
-    write_csv(
-        args.output_dir / "snr_depth_per_filter.csv",
-        snr_depth_rows,
-        ["filter", "snr_depth_3", "snr_depth_5"],
-    )
-    combined_df.to_csv(
-        args.output_dir / "combined_completeness.csv", index=False,
-    )
-    write_csv(
-        args.output_dir / "snr_depth_curves.csv",
-        [entry | {"filter": f}
-         for f, curve in snr_curves.items() for entry in curve],
-        ["filter", "bin_center", "n_with_snr", "median_snr",
-         "n_with_err", "median_err"],
-    )
+    if a.color_cols:
+        b, rc = (pd.to_numeric(parent[c], errors="coerce") for c in a.color_cols)
+        parent["color"] = b - rc
+        okc = parent["color"].notna()
+        tab_c = completeness(parent[okc], pd.qcut(parent.loc[okc, "color"], 4),
+                             "color", parent.loc[okc, "color"])
+        tab_c.to_csv(a.outdir / "completeness_vs_color.csv", index=False)
+        say(f"\nCompletitud vs color ({a.color_cols[0]} - {a.color_cols[1]}, cuartiles):")
+        say(tab_c[["color", "n_parent", "frac_phot", "frac_both", "chi2_survival"]]
+            .to_string(index=False, float_format="%.2f"))
 
-    # --- Summary text ----------------------------------------------------
-    summary = args.output_dir / "completeness_summary.txt"
-    with summary.open("w", encoding="utf-8") as fh:
-        fh.write(f"Parent objects with valid rmag : {n_parent}\n")
-        fh.write(f"With good photometry           : {n_phot}\n")
-        fh.write(f"With good CIGALE fit           : {n_fit}\n")
-        fh.write(f"With both (final scientific)   : {n_both}\n\n")
-        fh.write(f"Median r (parent)              : {parent_med:.3f}\n")
-        fh.write(f"Median r (combined subsample)  : {subsample_med:.3f}\n")
-        fh.write(f"Offset                         : "
-                 f"{subsample_med - parent_med:+.3f} mag\n\n")
-        fh.write("Per-filter S/N depths (mag):\n")
-        for row in snr_depth_rows:
-            d3 = f"{row['snr_depth_3']:.2f}" if row["snr_depth_3"] else "n/a"
-            d5 = f"{row['snr_depth_5']:.2f}" if row["snr_depth_5"] else "n/a"
-            fh.write(f"  {row['filter']}: S/N=3 -> {d3}   S/N=5 -> {d5}\n")
-        fh.write("\nCombined completeness vs rmag:\n")
-        fh.write("  r_center  n  phot%  fit%  both%\n")
-        for _, r in combined_df.iterrows():
-            fh.write(
-                f"  {r['r_center']:6.2f}  {int(r['n_parent']):4d}  "
-                f"{r['frac_phot']:5.1f}  {r['frac_fit']:5.1f}  "
-                f"{r['frac_both']:5.1f}\n"
-            )
+    med_p, med_f = float(rr.median()), float(rr[parent["combined"]].median())
+    say(f"\nMediana r: padre {med_p:.3f}, muestra final {med_f:.3f}, offset {med_f - med_p:+.3f} mag")
 
-    # --- Figures ---------------------------------------------------------
-    snr_fig = args.output_dir / f"snr_depth.{args.plot_format}"
-    comp_fig = args.output_dir / f"completeness.{args.plot_format}"
-
-    make_snr_figure(
-        snr_curves,
-        snr_fig,
-        bin_width=args.bin_width,
-        min_n_per_bin=args.min_n_per_snr_bin,
-        xlim=(args.snr_xlim_low, args.snr_xlim_high),
-    )
-    make_completeness_figure(combined_df, comp_fig, chi2_max=args.chi2_max)
-
-    # --- Console summary -------------------------------------------------
-    print("Per-filter S/N depths (mag):")
-    for row in snr_depth_rows:
-        d3 = f"{row['snr_depth_3']:.2f}" if row["snr_depth_3"] else "n/a"
-        d5 = f"{row['snr_depth_5']:.2f}" if row["snr_depth_5"] else "n/a"
-        print(f"  {row['filter']}:  S/N=3 -> {d3}   S/N=5 -> {d5}")
-
-    print("\nCombined completeness vs rmag:")
-    print(combined_df.to_string(index=False, float_format="%.1f"))
-
-    print(f"\nMedian r (parent)             : {parent_med:.3f}")
-    print(f"Median r (combined subsample) : {subsample_med:.3f}")
-    print(f"Offset                        : "
-          f"{subsample_med - parent_med:+.3f} mag")
-
-    print(f"\nSaved {args.output_dir / 'completeness_summary.txt'}")
-    print(f"Saved {args.output_dir / 'combined_completeness.csv'}")
-    print(f"Saved {args.output_dir / 'snr_depth_per_filter.csv'}")
-    print(f"Saved {snr_fig}   (Section 2 figure)")
-    print(f"Saved {comp_fig}  (Section 3 figure)")
+    # --- salidas -----------------------------------------------------------------
+    phot.to_csv(a.outdir / "canonical_photometry.csv", index=False)
+    selected.drop(columns=[c for c in selected.columns if c.startswith("capped_")]) \
+            .to_csv(a.outdir / "selected_sample.csv", index=False)
+    (a.outdir / "summary.txt").write_text("\n".join(log) + "\n", encoding="utf-8")
+    print(f"\nSalidas en {a.outdir}/")
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
