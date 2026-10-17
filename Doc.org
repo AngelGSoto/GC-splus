@@ -1248,7 +1248,428 @@ python ../Programs/extinction_correction.py
 ** Next Steps for CIGALE Analysis
 The generated file is now the foundation for both CIGALE experiments. Ensure your subsequent data preparation script uses the corrected columns (~*_corr~) to create the final ~data_file~ for CIGALE's ~pcigale.ini~ configuration.
 
-* Science
+
+* Referee response (A&A aa62907-26, major revision)
+Status of the work done to answer the referee report (received October 2026).
+Revised version due within three months.
+
+** Comment: depth of the narrow-band imaging and completeness — DONE
+*** What the referee asked
+Quantify the depth of the new narrow-band photometry, how it affects the
+completeness of the final GC sample, and whether the quality cuts bias the
+sample towards brighter GCs.
+
+*** What we did
+- A single script derives everything (selection, depth, completeness) from the
+  SAME photometry file used for the CIGALE run of the paper:
+  ~Results_Corrected/all_fields_photometry_COMPLETE_extinction.csv~,
+  deduplicated with ~keep='first'~ on (RAJ2000, DEJ2000).
+- The script reproduces exactly the 1394-object sample of the paper
+  (0 objects and 0 error values different from ~OPTIMIZED_1394objects.csv~).
+- WARNING: ~all_fields_photometry_FULL_3209objects.csv~ contains different
+  photometry (re-applying the cuts gives 2038 instead of 1394 objects).
+  Do NOT use it for the paper.
+
+*** Script and command
+Script: ~Programs/quantify_depth_completeness.py~ (unified version).
+Run from ~anac_data/CIGALE-DEcam-extinction/~:
+#+begin_src sh
+python ../../Programs/quantify_depth_completeness.py \
+    --raw       /media/luis/Data/GC-Porto-Alegre/anac_data/Results_Corrected/all_fields_photometry_COMPLETE_extinction.csv \
+    --reference /media/luis/Data/GC-Porto-Alegre/TAP_1_J_MNRAS_3444_gc.csv \
+    --cigale    /media/luis/Data/GC-Porto-Alegre/anac_data/CIGALE-DEcam-extinction/out/results.fits \
+    --compare-selected /media/luis/Data/GC-Porto-Alegre/anac_data/Results_Corrected/all_fields_photometry_OPTIMIZED_1394objects.csv \
+    --dedup first \
+    --depth-xlim 15.5 22.5 \
+    --outdir    /media/luis/Data/GC-Porto-Alegre/anac_data/figures/run_paper
+#+end_src
+Optional flags: ~--color-cols gmag imag~ (completeness vs colour),
+~--dedup best~, ~--exclude-capped~, ~--require F660 F861~, ~--depth-xaxis r~.
+
+Outputs (in ~figures/run_paper/~): ~snr_depth.pdf~ (Sect. 2),
+~completeness_r.pdf~ and ~completeness_radius.pdf~ (Sect. 3),
+~summary.txt~, CSV tables, ~canonical_photometry.csv~, ~selected_sample.csv~.
+
+*** Key results
+- Sample: 3209 T17 candidates -> 2717 with P(GC) >= 0.7 (initial sample)
+  -> 1394 photometric selection -> 884 with chi2_nu <= 2.
+  (1394 - 884 = 510 poor fits; 506 of them have coordinates, Fig. 5.)
+- 5sigma depths (mag): J0378 19.48, J0395 19.30, J0410 19.64, J0430 19.67,
+  J0515 19.81, J0660 20.64, J0861 19.54. (Old values in the paper came from
+  the FULL file and were replaced.)
+- Pipeline floor: the catalogue caps the magnitude errors at 0.543 mag
+  (S/N = 2). In the selected sample, 62%, 66%, 54%, 50%, 28%, 0.6% and 3.9%
+  of the objects have the capped value in J0378...J0861.
+- Final sample with S/N > 3: 10%, 8%, 18%, 24%, 52%, 99%, 92% (J0378...J0861).
+  The selection relies mainly on J0515, J0660 and J0861.
+- Completeness vs r: photometric cuts retain 71–77% for r < 20, 61% at
+  r ~ 20.25, 43% at 20.75, 5% at 21.75. The chi2 cut is roughly magnitude
+  independent (60–78% down to r ~ 20.75). Final sample ~50% complete for
+  r < 20; median r is 0.42 mag brighter than the initial sample.
+- Completeness vs radius: 76% in the innermost bin (median R ~ 13 kpc) vs
+  40–58% at R ~ 50–165 kpc; at fixed magnitude (r < 20.3): 98% vs 56–67%.
+
+*** Changes in the paper
+- New Sect. 2.3 "Depth of the narrow-band imaging" (figure + table).
+- New Sect. 3.1 "Completeness of the GC sample" (two figures).
+- Sect. 3: removed the claim of 0.54 mag median errors "ensuring robust
+  constraints"; added the ">= 3 of 7 filters" rule; median errors now quoted
+  for J0515, J0660, J0861 (0.36, 0.11, 0.19 mag).
+- Implications for the gradients: to be discussed in the reply to the
+  gradients comment.
+
+** Comment: model dependence of the metallicities — DONE except gradients (see below)
+The referee asks how the results change with the modelling ingredients
+(SSP library, SFH, e.g. bursty), whether the spectroscopic comparison and the
+gradients are robust, and for a clear statement on the uncertainties.
+Plan: CIGALE runs that change ONE ingredient at a time with respect to the
+paper run (see "CIGALE runs" below), then compare: [Fe/H] object by object,
+MAE/bias vs Beasley+08 and Hernandez+18 (same objects), N with chi2 <= 2,
+GMM, and radial gradients.
+
+** Comment: broad-band-only test (Sect. 4.1.2 / App. F) — DONE (see below)
+The referee notes that the 5-band test used 123 GCs vs 94 with 12 bands.
+Plan: compare both runs on the SAME objects, and show directly the width of
+the [Fe/H] posterior with and without narrow bands.
+To check: does the 5-band CIGALE run still exist? If not, the setup script
+needs a broad-band-only option.
+
+* CIGALE: recovery of the paper configuration and new runs
+** What happened
+While experimenting with a GitHub coding agent, the ~pcigale.ini~ of the
+paper run was replaced by an older version (git only had the 19-Dec-2025
+version: 180 models, no dust, ~mock_flag = False~). The paper run itself was
+never committed. The results (~out/results.fits~, 15-Jan-2026) were intact.
+
+** How the configuration was recovered
+1. Grid read from the ~best.*~ columns of ~out/results.fits~: modules
+   sfhdelayed, xsl, dustatt_modified_starburst, dale2014, redshifting;
+   14 ages; 7 tau; 5 Z; 11 x 3 x 11 dust values -> 177,870 models
+   (as in the paper, Appendix E).
+2. The input file of the paper run was recovered from ~out/observations.fits~.
+   The narrow bands are identical to the file in the folder, but the DECam
+   fluxes differ by up to 9% (u) and 7% (g): the file restored by git is NOT
+   the one used in January.
+3. ~observations.fits~ stores the errors WITH the 5% additional error already
+   added by CIGALE. The original errors were recovered as
+   sigma = sqrt(sigma_obs^2 - (0.05 F)^2).
+4. Verification with 30 objects: chi2 ratio 1.0, differences ~1e-5 (chi2),
+   ~1e-8 ([Fe/H]), 0.02 Myr (age). The configuration is fully recovered.
+
+** Paper configuration (verified)
+| Parameter              | Value                                                             |
+|------------------------+-------------------------------------------------------------------|
+| SFH                    | sfhdelayed, tau_main = 0.1, 1, 2, 3, 5, 50, 100 Myr               |
+| Ages                   | 1000, 5000, 8000, 10000, 10500, ..., 12750, 13000 Myr (14 values) |
+| SSP                    | xsl, imf = 1, Z = 0.0004, 0.004, 0.008, 0.02, 0.03                |
+| Dust attenuation       | E(B-V)_lines 0–0.7 (11), factor 0.25/0.5/0.75, slope -1–0 (11)    |
+| Dust emission          | dale2014, fracAGN = 0, alpha = 2                                  |
+| additionalerror        | 0.05                                                              |
+| mock_flag              | True                                                              |
+| Number of models       | 177,870                                                           |
+| Broad-band filter names| sdss.up, sdss.gp, sdss.rp, sdss.ip, sdss.zp (SDSS curves)         |
+| Input file             | ~gc_input_enero2026_raw.txt~                                      |
+
+** Files (all in ~anac_data/CIGALE-DEcam-extinction/~ unless stated)
+| File                                                    | Purpose                                                        |
+|---------------------------------------------------------+----------------------------------------------------------------|
+| ~Programs/configurar_cigale_decam_v2_final_decamReal.py~ | Prepares a CIGALE run folder (pcigale.ini + .spec + data)      |
+| ~Programs/preparar_cigale_decam_final_realDecam.py~      | Builds a CIGALE input from the photometric CSV (sdss/decam)    |
+| ~recuperar_entrada.py~                                  | Extracts the January input from ~out/observations.fits~        |
+| ~recuperar_entrada_raw.py~                              | Removes the 5% added error -> ~gc_input_enero2026_raw.txt~     |
+| ~comparar.py~                                           | Compares a run (~<dir>/out/results.fits~) with the paper run   |
+| ~errores.py~                                            | Diagnostic: errors in observations.fits vs input file          |
+| ~gc_input_enero2026_raw.txt~                            | Input of the paper run (use this one)                          |
+| ~gc_input_enero2026_raw_decam.txt~                      | Same data, DECam filter names                                  |
+| ~gc_input_enero2026.txt~                                | DO NOT USE: errors include the 5% twice                        |
+
+** Commands
+*** Recover the input of the paper run (done)
+#+begin_src sh
+cd /media/luis/Data/GC-Porto-Alegre/anac_data/CIGALE-DEcam-extinction
+python recuperar_entrada.py        # -> gc_input_enero2026.txt (errors incl. 5%)
+python recuperar_entrada_raw.py    # -> gc_input_enero2026_raw.txt (original errors)
+#+end_src
+
+*** Verify the configuration with 30 objects (done)
+#+begin_src sh
+S=../../Programs/configurar_cigale_decam_v2_final_decamReal.py
+python $S --data gc_input_enero2026_raw.txt --outdir t_final --test 30
+(cd t_final && pcigale run > /dev/null 2>&1)
+python comparar.py t_final        # chi2 ratio 1.0, differences ~0
+#+end_src
+
+*** Options of the setup script
+| Option      | Values (default first)            | Meaning                                  |
+|-------------+-----------------------------------+------------------------------------------|
+| ~--ages~    | paper (14), script (16)           | age grid                                 |
+| ~--adderr~  | 0.05                              | additionalerror                          |
+| ~--curves~  | sdss, decam                       | broad-band filter curves                 |
+| ~--dust~    | on, off                           | dust attenuation                         |
+| ~--sfh~     | delayed, 2exp                     | SFH (2exp = main population + burst)     |
+| ~--cores~   | 4                                 | CPU cores (12 makes the laptop shut down) |
+| ~--test N~  | 0 (all)                           | use only the first N objects             |
+The script never overwrites an existing folder and writes ~setup_log.txt~.
+CIGALE requires ~pcigale.ini.spec~; the script creates it with
+~pcigale init~ + ~pcigale genconf~ and then restores our ~pcigale.ini~.
+
+*** DECam filter curves (done once)
+Downloaded from the SVO Filter Profile Service: ~CTIO/DECam.u,g,r,i,z~
+(total transmission, DR1, AB). Header added and imported into CIGALE:
+#+begin_src sh
+cd /media/luis/Data/GC-Porto-Alegre/Filter_decam
+for b in u g r i z; do
+  { echo "# DECam_${b}"; echo "# photon"
+    echo "# CTIO/DECam.${b} total transmission (DR1), SVO Filter Profile Service"
+    grep -v '^#' CTIO_DECam.${b}.dat; } > DECam_${b}.dat
+done
+pcigale-filters add DECam_u.dat DECam_g.dat DECam_r.dat DECam_i.dat DECam_z.dat
+pcigale-filters list | grep -i decam     # pivot: 381, 480, 641, 781, 916 nm
+#+end_src
+Note: the DECam u response (pivot 3814 Å, FWHM 245 Å) is very different from
+SDSS u (~3560 Å, ~600 Å) used in the paper run.
+
+*** New runs for the referee (run from ~anac_data/~)
+#+begin_src sh
+cd /media/luis/Data/GC-Porto-Alegre/anac_data
+D=CIGALE-DEcam-extinction
+S=../Programs/configurar_cigale_decam_v2_final_decamReal.py
+
+# input with DECam filter names (same fluxes and errors)
+sed '1s/sdss\.up/DECam_u/g; 1s/sdss\.gp/DECam_g/g; 1s/sdss\.rp/DECam_r/g; 1s/sdss\.ip/DECam_i/g; 1s/sdss\.zp/DECam_z/g' \
+    $D/gc_input_enero2026_raw.txt > $D/gc_input_enero2026_raw_decam.txt
+
+python $S --data $D/gc_input_enero2026_raw_decam.txt --outdir CIGALE-decamcurves --curves decam
+python $S --data $D/gc_input_enero2026_raw.txt       --outdir CIGALE-nodust --dust off
+python $S --data $D/gc_input_enero2026_raw.txt       --outdir CIGALE-burst  --sfh 2exp --dust off
+
+cd CIGALE-decamcurves
+pcigale check            # 177,870 models, bands DECam_*
+nohup pcigale run > run.log 2>&1 &
+tail -f run.log
+#+end_src
+
+** CIGALE runs: status
+| Run                   | Changes w.r.t. paper            | Models  | Status   |
+|-----------------------+---------------------------------+---------+----------|
+| Paper (15-Jan-2026)   | —                               | 177,870 | done     |
+| ~CIGALE-decamcurves~  | DECam filter curves             | 177,870 | done (worse fits; SDSS curves kept) |
+| ~CIGALE-nodust~       | no internal dust                | 490     | done     |
+| ~CIGALE-bc03~         | BC03 library (Z 0.0004–0.05)    | 177,870 | done     |
+| ~CIGALE-bursty~       | sfhperiodic (bursty SFH)        | 203,280 | done     |
+| ~CIGALE-broadonly~    | only the 5 broad bands          | 177,870 | done     |
+| ~CIGALE-broadonly-nodust~ | 5 broad bands, no dust      | 490     | done     |
+| ~CIGALE-burst~ (sfh2exp) | not run (bursty = sfhperiodic) | —     | dropped  |
+Decision rule: if ~CIGALE-decamcurves~ changes the results significantly, it
+becomes the new reference and the nodust/burst runs must be repeated with
+DECam curves.
+
+** To do in the paper (Appendix E and related)
+- Add: "A relative uncertainty of 5% was added in quadrature to all fluxes."
+- Check which IMF corresponds to ~imf = 1~ in the xsl module (text says
+  Chabrier; old ini comments say Kroupa):
+  ~grep -n -i imf /home/luis/Downloads/cigale-v2022.1/pcigale/sed_modules/xsl.py~
+- With tau <= 100 Myr the delayed SFH is essentially an SSP; rephrase
+  "moderate extended formation histories".
+- If DECam curves are adopted: update Table A.1 with the SVO values
+  (u: lambda_eff 3857 Å, FWHM 245 Å, ...) and use DECam extinction
+  coefficients (Schlafly & Finkbeiner 2011, Table 6, DES/DECam rows).
+
+** Reproducibility rules (lessons learned)
+- Commit every ~pcigale.ini~, input file and setup script used for the paper:
+  #+begin_src sh
+  git add -f Programs/configurar_cigale_decam_v2_final_decamReal.py \
+             anac_data/CIGALE-DEcam-extinction/gc_input_enero2026_raw.txt
+  git commit -m "Verified CIGALE configuration and input of the paper run"
+  #+end_src
+- Do not let coding agents switch branches or restore files in the data
+  folders; review their branches (~copilot/*~) before merging anything.
+- Each run in its own folder; never edit a finished run folder.
+
+** Result of the DECam-curve test and decision (16-Oct-2026)
+| Quantity                       | Paper (SDSS curves) | DECam natural curves |
+|--------------------------------+---------------------+----------------------|
+| GCs with chi2_nu <= 2          | 884                 | 571                  |
+| Matches with Beasley+08        | 94                  | 51                   |
+| MAE vs Beasley+08              | 0.28 dex            | 0.63 dex             |
+| Bias vs Beasley+08             | +0.18 dex           | +0.63 dex            |
+| Matches with Hernandez+18      | 7                   | 1                    |
+(Control pending: run the literature-comparison script on the paper results
+to confirm 884 / 94 / 0.28 dex with the same script.)
+
+Why: the SCABS photometry (Taylor et al. 2016, Sect. 3.2.3) is calibrated with
+the u'g'r'i'z' standard-star field LSE_44 (Smith et al. 2007), with zero points
+referred to the AB u'g'r'i'z' standard system (zp = m_std - m_inst + kX, no
+colour term). Hence the T17 magnitudes are on the u'g'r'i'z' standard system
+and the SDSS (prime) filter curves are the appropriate ones.
+Note: in r' the SCABS zero point differed by ~0.45 mag from CTIO; they adopted
+the CTIO value with a larger error (useful for the systematics discussion).
+
+Decision: keep the SDSS curves (paper run) as the reference. The DECam-curve
+run is reported to the referee as a test of a modelling ingredient.
+
+Text for the paper (Sect. 2.1 / Appendix E):
+#+begin_src latex
+The DECam $u'g'r'i'z'$ photometry of \citet{Taylor:2017} is calibrated onto
+the AB $u'g'r'i'z'$ standard system \citep{Smith:2007, Taylor:2016};
+accordingly, we model it with the SDSS $u'g'r'i'z'$ filter curves in CIGALE.
+Using instead the natural DECam system responses substantially degrades the
+fits (571 vs. 884 GCs with $\chi^2_\nu \le 2$), consistent with this calibration.
+#+end_src
+Also: Table A.1 already lists lambda_eff(u) = 3543 Å (SDSS u), consistent with
+the curves actually used; relabel the block "Blanco/DECam (u'g'r'i'z' standard system)".
+
+** Extinction (status)
+- Broad bands: the Schlafly & Finkbeiner (2011) SDSS coefficients are the
+  right ones (photometry on the u'g'r'i'z' system). No change needed.
+- VizieR T17 magnitudes are NOT dereddened (only Table 2 of the T17 paper is),
+  so there is no double correction.
+- Narrow bands: Herpich et al. (2024) coefficients checked; state in
+  Appendix C which E(B-V) they assume (SFD as is, or x0.86).
+- Pending: ~extincion_enero.py~ (in ~anac_data/~) measures the slope of
+  dm(January - git) vs E(B-V) per broad band, to know exactly which
+  correction the January (paper) input had and describe it in Appendix C.
+
+** How CIGALE matches photometry and filter curves
+CIGALE links three things BY NAME:
+1. Column of the data file: e.g. ~sdss.up~ holds the u-band fluxes (DECam data,
+   u'g'r'i'z' system) and ~sdss.up_err~ their errors.
+2. The ~bands~ line of ~pcigale.ini~ tells CIGALE which columns to fit. With
+   ~--curves sdss~ (default) the setup script writes:
+   #+begin_example
+   bands = F0378, F0378_err, ..., sdss.up, sdss.up_err, sdss.gp, sdss.gp_err, ...
+   #+end_example
+3. The filter curve: for every band in that list CIGALE uses the curve with
+   the SAME name in its filter database (~sdss.up~ -> SDSS u' curve shipped
+   with CIGALE; ~F0378~ -> S-PLUS curve added earlier; ~DECam_u~ -> curve
+   added with ~pcigale-filters add~).
+Therefore, to change the filter curves only the NAMES change (header of the
+data file and ~bands~ line); fluxes and errors stay identical. The setup
+script stops with an error if the requested curves (~--curves~) do not match
+the column names of the input file, so curves cannot be mixed by accident.
+Check: ~pcigale check~ shows "Bands fitted ... sdss (5)" for the SDSS runs.
+
+** Next run: no internal dust (SDSS curves, as the paper)
+#+begin_src sh
+cd /media/luis/Data/GC-Porto-Alegre/anac_data
+D=CIGALE-DEcam-extinction
+head -1 $D/gc_input_enero2026_raw.txt          # must show sdss.* columns
+python ../Programs/configurar_cigale_decam_v2_final_decamReal.py \
+    --data $D/gc_input_enero2026_raw.txt --outdir CIGALE-nodust --dust off
+sed -i 's/save_best_sed = True/save_best_sed = False/' CIGALE-nodust/pcigale.ini
+cd CIGALE-nodust
+grep -E "^bands|E_BV_lines|save_best_sed" pcigale.ini
+pcigale check                                   # 490 models, bands sdss
+pcigale run
+cd .. && python comparar_modelos.py CIGALE-nodust
+#+end_src
+Note: always set ~save_best_sed = False~ for the robustness runs: the
+per-object spectra filled the disk (/media/luis/Data at 100%) during the
+first DECam-curve run. Only ~out/results.fits~ is needed for the comparisons.
+
+* Update 16-Oct-2026 (evening): model-dependence and broad-band tests
+** New options in the scripts
+- ~Programs/configurar_cigale_decam_v2_final_decamReal.py~:
+  ~--ssp bc03~, ~--sfh periodic~, ~--only-broad~ (defaults still reproduce
+  the paper configuration exactly; 4 cores by default).
+- ~Programs/comparar_espectroscopia_modelos.py~ (run from ~anac_data/~):
+  compares any set of runs with Beasley+08 and Hernandez+18 using the SAME
+  objects (A), each run's own chi2 cut (B), object-by-object differences
+  with the paper (C), and posterior widths on the same objects (D).
+  Validated: reproduces MAE 0.279 / bias +0.177 of the paper.
+  #+begin_src sh
+  python ../Programs/comparar_espectroscopia_modelos.py \
+      CIGALE-decamcurves CIGALE-nodust CIGALE-bc03 CIGALE-bursty \
+      CIGALE-broadonly CIGALE-broadonly-nodust
+  #+end_src
+- ~test_bandas_angostas.py~ (in ~anac_data/~): overlap of good fits between
+  12-band and 5-band runs, paired Wilcoxon test on sigma[Fe/H], and
+  MAE/bias on the common sample.
+- Commands for the runs (from ~anac_data/~, D=CIGALE-DEcam-extinction):
+  #+begin_src sh
+  S=../Programs/configurar_cigale_decam_v2_final_decamReal.py
+  python $S --data $D/gc_input_enero2026_raw.txt --outdir CIGALE-bc03   --ssp bc03
+  python $S --data $D/gc_input_enero2026_raw.txt --outdir CIGALE-bursty --sfh periodic
+  python $S --data $D/gc_input_enero2026_raw.txt --outdir CIGALE-broadonly --only-broad
+  python $S --data $D/gc_input_enero2026_raw.txt --outdir CIGALE-broadonly-nodust --only-broad --dust off
+  sed -i 's/save_best_sed = True/save_best_sed = False/' CIGALE-*/pcigale.ini
+  (cd <run> && pcigale check && pcigale run)
+  #+end_src
+
+** Results (same 81 Beasley + 7 Hernandez GCs in every run)
+| Configuration             | N chi2<=2 | sigma[Fe/H] | MAE B08 | bias B08 | scatter | MAE H18 | Delta[Fe/H] vs paper |
+|---------------------------+-----------+-------------+---------+----------+---------+---------+----------------------|
+| Original (XSL, paper)     |       884 |        0.54 |    0.28 |    +0.18 |    0.35 |    0.26 | —                    |
+| BC03                      |       921 |        0.50 |    0.49 |    +0.47 |    0.35 |    0.57 | +0.08 +- 0.34        |
+| Bursty SFH                |       854 |        0.45 |    0.50 |    +0.49 |    0.38 |    0.50 | +0.17 +- 0.34        |
+| No internal dust          |       667 |        0.11 |    0.48 |    +0.46 |    0.32 |    0.64 | +0.18 +- 0.19        |
+| Broad bands only          |      1155 |        0.55 |    0.33 |    +0.30 |    0.31 |    0.42 | +0.03 +- 0.06        |
+| Broad bands only, no dust |       677 |        0.12 |    0.50 |    +0.49 |    0.33 |    0.65 | +0.21 +- 0.21        |
+| DECam natural curves      |       571 |        0.23 |    0.64 |    +0.64 |    0.30 |    0.78 | +0.32 +- 0.25        |
+(DECam-curve test NOT included in the paper: not requested by the referee.)
+
+Key findings:
+- Absolute metallicity scale: systematic uncertainty up to ~0.3 dex from
+  the modelling choices (BC03 and bursty fit as well as XSL but give
+  +0.3 dex higher [Fe/H] for the spectroscopic GCs).
+- Scatter vs spectroscopy similar in all runs (0.31–0.38 dex): models mainly
+  introduce a systematic offset; individual [Fe/H] differ by 0.2–0.3 dex.
+- Formal uncertainties dominated by the dust–metallicity degeneracy
+  (0.54 -> 0.11 dex without dust).
+- Narrow bands: improve ACCURACY (bias +0.30 -> +0.18 dex), NOT precision
+  (sigma 0.54 vs 0.51). Improvement almost vanishes without dust
+  (+0.49 -> +0.46): they mainly help to partially break the dust–metallicity
+  degeneracy.
+- Overlap of good fits: 884 (12 bands), 1155 (5 bands), 801 in both; on the
+  common sample: 78 B08 GCs, bias +0.17 vs +0.30; 5 H18 GCs, MAE 0.20 vs 0.43.
+  sigma medians 0.557 vs 0.558 (68% of GCs have slightly LARGER sigma with
+  12 bands; Wilcoxon p = 7e-18).
+- Each run's own chi2 cut reproduces the OLD broad-band values (0.40 / +0.36):
+  the change to 0.33 / +0.30 is only due to using the same objects.
+- Beasley+08: 94 GCs cross-matched, only 81 have [M/H] (13 empty cells in
+  the catalogue; verified). The paper's MAE/bias were always computed on 81.
+- Hernandez+18: 7 of the 20 GCs are in our 1394 sample; all 7 have chi2<=2.
+
+** Paper changes done
+- Sect. 3: "Dark Energy Survey" -> DECam/T17 (to do), Z_sun = 0.02 (to do),
+  contamination and "iterative process" sentences (to do); new paragraph:
+  5% added error in quadrature, median sigma[Fe/H] = 0.54 dex (done).
+- Sect. 4.1.2 rewritten: "Contribution of the narrow-band filters" (done).
+- Sect. 4.1.3 new: "Dependence on the modelling choices" + table with
+  6 rows; "original configuration" wording (done; gradients paragraph pending).
+- Appendix I: BC03 paragraph removed (pointer to Sect. 4.1.3); update
+  references in end of Sect. 4.3 and Appendix N (to do).
+- Appendix F removed.
+- TNG50 removed (Sect. 4.5, App. L, Fig. L.1, abstract, conclusion 5,
+  App. K sentence; check with grep for TNG / 242788 / Doppel / Pillepich).
+- To do: N = 81 in Sect. 4.1.1, Fig. 4 and its box; moderate narrow-band
+  claims (Sect. 4.1.1, App. N, conclusion 1, final paragraph).
+
+** Referee reply: status
+| #  | Comment                                   | Status                          |
+|----+-------------------------------------------+---------------------------------|
+| 1  | Restructuring                             | reply at the end                |
+| 2  | Depth and completeness                    | done (fill Table/Fig numbers)   |
+| 3  | Model dependence                          | done except (iii) gradients     |
+| 4  | Broad-band-only test                      | done                            |
+| 5  | Gradient uncertainties (weights, bootstrap)| next                           |
+| 6  | GMM tests in main text + final 3-comp fig | pending                         |
+| 7  | MDF in radial bins                        | pending                         |
+| 8  | TNG50                                     | done (removed)                  |
+| 9  | Ages of young GCs vs halo stars / merger  | pending                         |
+| 10 | Int population: mass–metallicity          | pending                         |
+| 11 | Spatial distribution, 2D maps, streams    | pending                         |
+| —  | Minor comments                            | pending (some solved in Sect. 3)|
+
+** Next session (Saturday)
+- Bring the GMM + gradient script (Table 2: MP -0.099, Int -0.001, MR -0.043;
+  N 240/435/209; old: 175/369/176).
+- One analysis for comments 3(iii), 5 and 7: reproduce Table 2, weighted
+  fit with intrinsic scatter, bootstrap (with and without GMM
+  reclassification), gradients for BC03 and bursty, MDF in radial bins.
+- Then comment 6 (GMM in main text, new 3-component figure for the 884 GCs).
+- Commit today's scripts and the verified input to git.
+
 
 * Contact and References
 - Author: Luis A. Gutiérrez Soto
@@ -1256,8 +1677,3 @@ The generated file is now the foundation for both CIGALE experiments. Ensure you
 - Catalog reference: TAP_1_J_MNRAS_3444_gc.csv (Taylor et al. 2017, MNRAS, 3444) ([[paper][https://ui.adsabs.harvard.edu/abs/2017MNRAS.469.3444T/abstract][paper]])
 - SPLUS Survey: Mendes de Oliveira et al. (2019)
 - More papers: Dahmer-Hahn, L. G.  (https://ui.adsabs.harvard.edu/abs/2024A%26A...690A..93D/abstract)
-
-#+BEGIN_CENTER
-* Documentation last updated: 18/09/2025 *
-#+END_CENTER
-* paper
