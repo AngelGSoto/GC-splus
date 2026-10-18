@@ -281,7 +281,7 @@ def _plot_metallicity_and_BIC(feh, results, best_n, colors, pop_short, title_a,
         pdf_c = best['weights'][i] * norm.pdf(x, best['means'][i], best['stds'][i])
         pdf_total += pdf_c
         ax1.plot(x, pdf_c, '--', linewidth=2.5, alpha=0.8, color=colors[i],
-                 label=f'{pop_short[i]}: μ={best["means"][i]:.2f}±{best["stds"][i]:.2f}')
+                   label=f'{pop_short[i]}: μ={best["means"][i]:.2f}, σ={best["stds"][i]:.2f}')
     ax1.plot(x, pdf_total, 'k-', linewidth=3.5, label='GMM fit', alpha=0.9)
     for i in range(best_n):
         xf = np.linspace(best['means'][i]-best['stds'][i],
@@ -299,6 +299,7 @@ def _plot_metallicity_and_BIC(feh, results, best_n, colors, pop_short, title_a,
                    framealpha=0.9)
     else:
         ax1.legend(fontsize=16, loc='upper center', framealpha=0.9)
+    ax1.set_ylim(0, 1.12 * ax1.get_ylim()[1])
     ax1.grid(True, alpha=0.2, linestyle='--')
 
     sep_str = ', '.join([f'{s:.2f}σ' for s in best['separations']])
