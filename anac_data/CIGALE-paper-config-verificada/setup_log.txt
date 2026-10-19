@@ -1,0 +1,20 @@
+2026-10-17 11:41:33
+data = CIGALE-DEcam-extinction/gc_input_enero2026_raw.txt
+outdir = CIGALE-paper-config-verificada
+ages = paper
+adderr = 0.05
+curves = sdss
+dust = on
+sfh = delayed
+ssp = xsl
+delta_bursts = 50, 200, 500, 1000
+tau_bursts = 10, 50
+f_burst = 0.0, 0.01, 0.05, 0.1
+burst_age = 50, 100, 300, 500
+tau_burst = 50
+only_broad = False
+cores = 4
+test = 0
+no_genconf = True
+modelos = 177870
+objetos = 1394
