@@ -1670,6 +1670,153 @@ Key findings:
 - Then comment 6 (GMM in main text, new 3-component figure for the 884 GCs).
 - Commit today's scripts and the verified input to git.
 
+* Update 17/18-Oct-2026: GMM, gradients, robustness (comments 3, 5, 6, 7)
+** Scripts (all in ~Programs/~, committed to git branch local-scripts)
+| Script                                | Purpose                                                                 |
+|---------------------------------------+-------------------------------------------------------------------------|
+| ~gmm_analysis_final_paper_v2.py~      | Paper GMM + gradients (reproduces Table 2 exactly) + comment 5 (OLS,     |
+|                                       | jackknife, bootstrap, weighted fits, GMM-refit bootstrap, err-[Fe/H]     |
+|                                       | correlations) + comment 7 (MDF in 3 radial bins); figures with larger    |
+|                                       | fonts; legend "μ=…, σ=…"; ylim factor in ~_plot_metallicity_and_BIC~      |
+|                                       | Options: --label --nboot --nboot-w --nboot-gmm --nbins --err-floor       |
+| ~gradientes_misma_clasificacion.py~   | Gradients per CIGALE model with SAME GCs and SAME (paper) membership     |
+| ~comparar_gradientes_modelos.py~      | Compares JSONs of v2 runs (each model with its own GMM) — complementary  |
+| ~gmm_bootstrap_validation.py~         | User's bootstrap script corrected: seed (2026), n=3 stability, failures  |
+| ~fig_gmm_adopt.py~                    | Fig. 11: adopted n=3 GMM (left) + bootstrap selection bars (right);      |
+|                                       | constants YTOP_LEFT, YTOP_RIGHT                                          |
+| ~CIGALE-DEcam-extinction/bootstrap_nbic.py~ | Resampling-only vs perturbation-only bootstrap (diagnostic)        |
+
+Commands (from the run folder, e.g. ~anac_data/CIGALE-DEcam-extinction~):
+#+begin_src sh
+python ../../Programs/gmm_analysis_final_paper_v2.py --label paper
+python ../../Programs/gmm_bootstrap_validation.py --nboot 200 --seed 2026
+python ../../Programs/fig_gmm_adopt.py --bootstrap "GMM_Final_Paper_bootstrap_seed2026_*/gmm_final_paper_results.json"
+cd .. && python ../Programs/gradientes_misma_clasificacion.py --ref CIGALE-DEcam-extinction CIGALE-bc03 CIGALE-bursty
+#+end_src
+Key output folders: ~GMM_Final_Paper_paper_20261017_111754~ (paper run, all comment 5/7
+results), ~GMM_Final_Paper_bootstrap_seed2026_20261017_211410~ (bootstrap),
+~GMM_Final_Paper_run_20261018_010834~ (final App. G figures), ~figures_paper/~ (Fig. 11).
+
+** Control: Table 2 of the paper reproduced exactly
+MP −0.099±0.025 (240), Int −0.001±0.024 (435), MR −0.043±0.010 (209);
+old: −0.092±0.026 (175), +0.030±0.028 (369), −0.045±0.011 (176). GMM params, BIC identical.
+
+** Comment 6: GMM model selection (bootstrap = resample + perturb, 200 real., seed 2026)
+| Sample | n=2   | n=3   | n>=4 | (Appendix I original)   |
+|--------+-------+-------+------+-------------------------|
+| All    | 50.0% | 49.0% | 1.0% | 53.5 / 44.5 / 2.0       |
+| Old    | 38.5% | 55.5% | 6.0% | 39.5 / 54.5 / 6.0       |
+- BIC: all min n=4 (ΔBIC 7.2, BF 36); old min n=3 (ΔBIC 123 vs 2; 2.9 vs 4, BF 4.2).
+- Resampling only (my script, n_init=3): all 0/21/79 %, old 0/65/35 % — NOT in paper
+  (different fitting method; reported only if referee asks).
+- Perturbation adds noise twice -> conservative; n=3 "stability" parameters in the
+  perturbed replicas (σ_MP ~1.5 dex) are NOT meaningful — do not report.
+- 2D GMM (App. I): young component mean ~3.6 Gyr (log age 0.56).
+
+** Comment 5: slope robustness (paper run)
+| Pop (all) | OLS            | jackknife | bootstrap 68%   | GMM-refit boot  | P(<0) |
+|-----------+----------------+-----------+-----------------+-----------------+-------|
+| MP        | −0.099 ± 0.025 | 0.024     | [−0.123,−0.076] | −0.095          | 1.00  |
+| Int       | −0.001 ± 0.024 | 0.025     | [−0.026,+0.025] | +0.005          | 0.46  |
+| MR        | −0.043 ± 0.010 | 0.011     | [−0.054,−0.033] | −0.041          | 1.00  |
+- Weighted fits NOT adopted: σ[Fe/H] correlates with [Fe/H] (Spearman ρ −0.50 Int,
+  −0.87 MR; old −0.66, −0.92) and σ_int = 0 (errors exceed observed scatter) -> weights
+  bias slopes to metal-rich GCs (WLS Int −0.055±0.029 is this bias). No σ≈0 errors
+  (min >0.05 dex; 6 below 0.1; 91 below 0.2).
+
+** Comment 3 (iii): gradients vs model — SAME GCs and SAME membership
+| Model      | MP             | Int            | MR             | Global         |
+|------------+----------------+----------------+----------------+----------------|
+| XSL (orig) | −0.099 ± 0.024 | −0.001 ± 0.025 | −0.043 ± 0.010 | −0.110 ± 0.035 |
+| BC03       | −0.236 ± 0.061 | −0.159 ± 0.032 | −0.080 ± 0.021 | −0.199 ± 0.031 |
+| Bursty SFH | −0.127 ± 0.060 | +0.002 ± 0.036 | −0.065 ± 0.020 | −0.090 ± 0.032 |
+(old: Int +0.030 / −0.185 / −0.025). Robust: negative global, MP, MR. Model-dependent:
+flat Int (flat with XSL and bursty, negative with BC03).
+- Own-GMM per model: BC03 changes the decomposition (MR 41%, old 369); bursty has 0 GCs
+  >8 Gyr (mass-weighted ages); bursty own-GMM: MP −0.085, Int +0.045, MR −0.041.
+
+** Comment 7: MDF in radial bins (paper run)
+| R (kpc)  | BIC n | f_MP | f_Int | f_MR | <FeH> MP | Int   | MR    |
+|----------+-------+------+-------+------+----------+-------+-------|
+| 2.7–49   | 3     | 0.26 | 0.45  | 0.29 | −1.29    | −0.59 | −0.03 |
+| 49–122   | 3     | 0.26 | 0.55  | 0.19 | −1.40    | −0.59 | −0.06 |
+| 122–186  | 4     | 0.27 | 0.56  | 0.17 | −1.39    | −0.59 | −0.08 |
+MR fraction decreases outward in ALL models (BC03 0.54->0.32; bursty 0.55->0.44):
+most robust result. Int mean constant; MP and MR means decrease outward.
+
+** Paper status after this session
+- Sect. 4.3 rewritten (tests -> old subsample -> adopted model); new Fig. 11
+  (~FullSample_Adopted_n3_Bootstrap.pdf~). Comment 6 DONE (reply drafted).
+- Appendix G: text + captions updated (μ, σ format; ±1σ shading; note n=4 not robust);
+  new figures from ~GMM_Final_Paper_run_20261018_010834/figures/~ (uploaded to Overleaf).
+- Appendix lettering after removing old F (broad bands): F age–met (g−i), G GMM tables,
+  H bootstrap (TO DELETE), I 2D GMM, J extra gradients, K TNG50 (TO DELETE),
+  L streams, M limitations.
+
+** TODO (next sessions)
+1. Delete App. H (bootstrap) and App. K + Fig. K.1 (TNG50); remove TNG50 from abstract,
+   Sect. 4.5, App. J (lines ~1254–1255), conclusion 5, unused references.
+2. Sect. 4.1.3: "reference" -> "original configuration" (text + Table 2); add gradient
+   paragraph + table (above).
+3. Sect. 4.4: robustness paragraph (comment 5), radial bins + ~Fig9_MDF_Radial_Bins.pdf~
+   (comment 7), moderate Int ("completely flat", "uniformly redistributed",
+   "robust, age-independent"), Fig. 12 caption (old GMM re-fitted, not same model).
+4. Quick fixes: N=81 (Sect. 4.1.1, Fig. 6 box + "χ² reducido" -> English; regenerate
+   with ~compare-luis-beasley-svea.py~ after sed patches); 0.571 -> 0.54 in Fig. 6 caption;
+   506 -> 510 (Sect. 4.2); ~33 Re -> ~32 Re (conclusions); App. D "0.5 mag" vs Sect. 3
+   "0.2 mag"; conclusion 2 bootstrap numbers (50.0/49.0/1.0; 55.5/38.5/6.0);
+   Sect. 3: "Dark Energy Survey" -> DECam, Z☉ = 0.02, "negligible contamination",
+   "iterative process"; typos ("commons", "tends to favours", "The additional
+   components", "more several", "derivated", "the their"); Sect. 4.2 Fig. 9 caption.
+5. Moderate: Int flat gradient (abstract, 4.4, 5.2, conclusion 4); narrow bands
+   accuracy not precision (4.1.1, App. M, conclusion 1, final paragraph).
+6. Comments 9 (young GC ages vs halo/merger), 10 (Int mass–metallicity), 11 (spatial
+   distribution: profiles relative between populations because of radial completeness,
+   azimuthal, 2D maps, streams to main text, stream vs halo GCs) — new script needed.
+7. Minor comments; App. C extinction checks (January coefficients; Herpich 0.86 factor).
+8. Final: reply to comment 1, marked PDF, full letter, summary for coauthors
+   (what is robust / what is nuanced / what was removed).
+Estimate: 5–7 working days + 1–2 weeks for coauthors.
+
+* Update 18-Oct-2026 (evening): comments 3, 5, 7 CLOSED
+** Paper text done
+- Sect. 4.4: paragraph on unweighted fits + jackknife + bootstraps (comment 5);
+  Table 3 (~tab:gradients_combined~) with σ_jack, bootstrap 68%, P(<0)
+  (TODO: N=176 typo, "<0.0001"); new appendix ~sec:boot_slopes~ with Fig8.
+- Sect. 4.4: old-GC sentence moderated ("not an artefact of young clusters");
+  new paragraph + Table ~tab:grad_models~ (table*) on gradients vs model (comment 3 iii),
+  incl. BC03 radial offset: Δ[Fe/H](BC03−XSL) +0.17 dex (<50 kpc) vs +0.04 (>50 kpc),
+  slope of the offset −0.089±0.024 dex/dex -> BC03 steepens all gradients.
+- Sect. 4.4 (last paragraph): radial-bin MDF (comment 7), short version + Fig9 caption.
+  Numbers verified: fractions MR 0.29/0.19/0.17, Int 0.45/0.55/0.56, MP ~0.26;
+  means MP −1.29/−1.40/−1.39, Int −0.59, MR −0.03/−0.06/−0.08; BIC n = 3/3/4.
+- Fig. 12 caption corrected (old GMM re-fitted; Int flat depends on library).
+- Replies to comments 3 (iii), 5, 7 written.
+- Decided NOT to add: resampling-only GMM bootstrap; weighted-fit number in text
+  (already justified in text and reply).
+** Figures (final run ~GMM_Final_Paper_paper_final2_20261018_220222~)
+Fig8_Bootstrap_Slopes (legend outside panels), Fig9_MDF_Radial_Bins (MDF_YTOP),
+FullSample/OldGCs_Gradient_Scatter (larger fonts). Script edits via
+~replace_funcs.py~ + ~new_funcs.py~ (Programs/). All numbers identical (seed 2026).
+** Correction to remember
+BC03 is NOT uniquely the worst vs spectroscopy: all alternatives ~0.48–0.50 MAE;
+the original (XSL) is the best (0.28). Use this wording in conclusions.
+** Plan agreed with collaborator
+- Comments 9 and 10: collaborator handles (literature, Discussion).
+- TNG50: remove (freezer), as the referee asked.
+- Comment 11: PRELIMINARY tests first (median projected radius + bootstrap; cumulative
+  radial distributions + KS/AD; correlation ellipses (b/a, PA) per population with
+  bootstrap; KDE maps for MP/Int/MR; full sample as reference). Then decide whether
+  radial-profile/azimuthal fits are justified. Caveat: major merger may also have
+  spread the MR GCs; discuss interpretation with Ana.
+  Inputs to confirm: centre RA=201.365063, Dec=−43.019112; PA measured E of N.
+** Remaining (besides comment 11)
+Remove TNG50 + GMM-bootstrap appendix; quick fixes (N=81, Fig. 6 regenerate, 510,
+~32 Re, App. D, Sect. 3 items, typos, "original configuration"); moderate Int
+(abstract, 4.4 results paragraph "completely flat… uniformly redistributed",
+5.2, concl. 4) and narrow bands (4.1.1, App. M, concl. 1, final paragraph);
+conclusion 2 bootstrap numbers; App. C checks; minor comments; comment 1 reply;
+Table/Fig numbers in letter; final check; coauthor summary.
 
 * Contact and References
 - Author: Luis A. Gutiérrez Soto
