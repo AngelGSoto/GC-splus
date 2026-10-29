@@ -96,3 +96,5 @@ NGC5128_GC_system.pdf
 NGC5128_GC_system_12May26 2.pdf
 paper_plots_final/
 Programs/ Splus_photometry_final_complete_v2_improve_last.py
+programs/syntphot_v2.py
+programs/symphotometry_v2.py
