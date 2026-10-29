@@ -1057,25 +1057,26 @@ def create_metallicity_vs_gz_with_marginals(df, output_dir='figures'):
     g = sns.JointGrid(data=df_filt, x='g_z', y='FeH')
     colors = {'Young (≤ 8 Gyr)': 'darkorange', 'Old (> 8 Gyr)': 'steelblue'}
 
-    for grp_name, mask in [('Young (≤ 8 Gyr)', young_mask),
-                           ('Old (> 8 Gyr)', old_mask)]:
+        # Viejos primero (debajo, semitransparentes); jovenes despues (encima)
+    for grp_name, mask in [('Old (> 8 Gyr)', old_mask),
+                           ('Young (≤ 8 Gyr)', young_mask)]:
         if mask.sum() == 0:
             continue
+        is_young = grp_name.startswith('Young')
         x = df_filt.loc[mask, 'g_z']
         y = df_filt.loc[mask, 'FeH']
         xerr = df_filt.loc[mask, 'g_z_err']
         yerr = np.clip(df_filt.loc[mask, 'FeH_err'], 0, 0.4)   # recorte visual
 
-        # Barras de error sutiles pero del color del grupo
-        g.ax_joint.errorbar(x, y,
-                            xerr=xerr, yerr=yerr,
-                            fmt='none', ecolor=colors[grp_name],
-                            alpha=0.22, capsize=0, elinewidth=0.6,
-                            zorder=1)
-        # Puntos encima
-        g.ax_joint.scatter(x, y, s=60, alpha=0.85,
-                           edgecolor='k', linewidth=0.3,
-                           color=colors[grp_name], label=grp_name, zorder=3)
+        g.ax_joint.errorbar(x, y, xerr=xerr, yerr=yerr, fmt='none',
+                            ecolor=colors[grp_name], alpha=0.22,
+                            capsize=0, elinewidth=0.6,
+                            zorder=2 if is_young else 1)
+        g.ax_joint.scatter(x, y, s=35,
+                           alpha=0.8 if is_young else 0.65,
+                           edgecolor='k', linewidth=0.2,
+                           color=colors[grp_name], label=grp_name,
+                           zorder=4 if is_young else 3)
 
     # Marginales
     sns.histplot(data=df_filt, x='g_z', hue='Age group', ax=g.ax_marg_x,
