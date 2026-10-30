@@ -1469,7 +1469,8 @@ nuevos (p.ej. *_final.py, *_v2.py), y comprobar con ~python script.py -h~ que ti
 - Nota: la fotometría sintética de las estrellas de Gaia XP (calibración del paper) se hizo
   con la v1 (~symphotometry.py~); la v2 se creó para los espectros de X-Shooter.
 
-
+- Nota: ~syntphot_v2.py~ y ~symphotometry_v2.py~ son versiones locales basadas en el código
+  de W.; no se suben al repositorio (están en .gitignore).
 
 * Contact and References
 - Author: Luis A. Gutiérrez Soto
