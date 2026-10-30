@@ -92,7 +92,7 @@ def main():
              bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
     ymax_h = max(np.histogram(feh, bins=30, density=True)[0].max(), tot.max())
     ax1.set_ylim(0, YTOP_LEFT*ymax_h)
-    ax1.grid(True, alpha=0.2, linestyle="--")
+    #ax1.grid(True, alpha=0.2, linestyle="--")
 
     # --- panel derecho: seleccion en el bootstrap ---
     ax2 = axes[1]
@@ -119,7 +119,7 @@ def main():
     ax2.set_ylabel("Selected in bootstrap (%)", fontsize=29)
     ax2.set_title(f"(b) Bootstrap model selection ({nboot} realisations)", fontsize=25)
     ax2.tick_params(axis="both", which="major", labelsize=26)
-    ax2.grid(True, alpha=0.2, linestyle="--", axis="y")
+    #ax2.grid(True, alpha=0.2, linestyle="--", axis="y")
     ax2.legend(fontsize=20, loc="upper right", framealpha=0.9)
 
     plt.tight_layout()

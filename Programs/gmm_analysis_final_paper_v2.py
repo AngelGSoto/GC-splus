@@ -300,7 +300,7 @@ def _plot_metallicity_and_BIC(feh, results, best_n, colors, pop_short, title_a,
     else:
         ax1.legend(fontsize=16, loc='upper center', framealpha=0.9)
     ax1.set_ylim(0, 1.12 * ax1.get_ylim()[1])
-    ax1.grid(True, alpha=0.2, linestyle='--')
+    #ax1.grid(True, alpha=0.2, linestyle='--')
 
     sep_str = ', '.join([f'{s:.2f}σ' for s in best['separations']])
     text_str = f"BIC = {best['bic']:.1f}\nAIC = {best['aic']:.1f}\nSep. = {sep_str}"
@@ -347,7 +347,7 @@ def _plot_metallicity_and_BIC(feh, results, best_n, colors, pop_short, title_a,
     ax2.set_ylabel('Information Criterion', fontsize=22)
     ax2.set_title(title_b, fontsize=19)
     ax2.tick_params(axis='both', which='major', labelsize=20)
-    ax2.grid(True, alpha=0.2, linestyle='--')
+    #ax2.grid(True, alpha=0.2, linestyle='--')
     ax2.set_xticks(n_values)
     ax2.text(0.01, 0.01, 'Numbers: min. component separation (σ)',
              transform=ax2.transAxes, fontsize=14, color='gray',
@@ -432,7 +432,7 @@ def plot_gradient_scatter(df_sp, labels_sp, radii, title_str, outfile_name, outp
     ax.set_title(title_str, fontsize=24)
     ax.tick_params(axis='both', which='major', labelsize=26)
     ax.legend(fontsize=17, loc='lower left', framealpha=0.9)
-    ax.grid(True, alpha=0.2, linestyle='--')
+    #ax.grid(True, alpha=0.2, linestyle='--')
     ymin, ymax = np.nanmin(feh_v), np.nanmax(feh_v)
     yr = ymax - ymin
     ax.set_ylim(ymin - 0.45*yr, ymax + 0.18*yr)
@@ -476,7 +476,7 @@ def plot_slope_comparison(gradient_results, title_str, outfile_name, output_dir)
     ax.set_ylabel('Gradient Slope (dex dex$^{-1}$)', fontsize=22)
     ax.set_title(title_str, fontsize=20)
     ax.tick_params(axis='both', which='major', labelsize=20)
-    ax.grid(True, alpha=0.2, linestyle='--', axis='y')
+    #ax.grid(True, alpha=0.2, linestyle='--', axis='y')
 
     stat_text = "GRADIENT STATISTICS\n" + "─"*30 + "\n"
     for p in pops:
@@ -560,7 +560,7 @@ def plot_binned_gradients_n3(df_sp, labels_sp, radii_kpc, output_dir):
             ax.set_ylabel('Mean [Fe/H] (dex)', fontsize=21)
         ax.tick_params(axis='both', which='major', labelsize=19)
         ax.legend(fontsize=16, loc='upper right', framealpha=0.9)
-        ax.grid(True, alpha=0.2, linestyle='--')
+        #ax.grid(True, alpha=0.2, linestyle='--')
         sig = '*' if p_val < 0.05 else 'ns'
         ax.text(0.05, 0.05, f'p={p_val:.4f} {sig}', transform=ax.transAxes, fontsize=15,
                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -705,7 +705,7 @@ def plot_bootstrap_slopes(rob_all, rob_old, output_dir):
                 ax.set_ylabel('Density', fontsize=28)
             ax.tick_params(axis='both', which='major', labelsize=24)
             ax.xaxis.set_major_locator(plt.MaxNLocator(4))
-            ax.grid(True, alpha=0.2, linestyle='--')
+            #ax.grid(True, alpha=0.2, linestyle='--')
     # Leyenda fuera de los paneles: no tapa ningun histograma
     handles = [plt.Rectangle((0, 0), 1, 1, facecolor='gray', alpha=0.5, edgecolor='black'),
                Line2D([0], [0], color='black', linewidth=2.2),
@@ -795,13 +795,13 @@ def plot_mdf_radial_bins(bins_res, mu_g, sd_g, output_dir):
         ax.set_title(f"{b['R_min_kpc']:.0f} < R < {b['R_max_kpc']:.0f} kpc", fontsize=25)
         ax.set_xlabel('[Fe/H] (dex)', fontsize=27)
         ax.tick_params(axis='both', which='major', labelsize=24)
-        ax.grid(True, alpha=0.2, linestyle='--')
+        #ax.grid(True, alpha=0.2, linestyle='--')
         ax.legend(fontsize=17, loc='upper left', framealpha=0.9)
-        means_txt = ', '.join(f'{v:.2f}' for v in b['free_n3_means'])
-        ax.text(0.98, 0.98, f"Min. BIC: n={b['best_n_bic']}\nFree n=3 μ:\n{means_txt}",
-                transform=ax.transAxes, fontsize=17, verticalalignment='top',
-                horizontalalignment='right',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        #means_txt = ', '.join(f'{v:.2f}' for v in b['free_n3_means'])
+        #ax.text(0.98, 0.98, f"Min. BIC: n={b['best_n_bic']}\nFree n=3 μ:\n{means_txt}",
+        #        transform=ax.transAxes, fontsize=17, verticalalignment='top',
+        #        horizontalalignment='right',
+        #        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
     axes[0].set_ylabel('Probability Density', fontsize=27)
     for ax in axes:
         ax.set_ylim(0, MDF_YTOP * ymax)
